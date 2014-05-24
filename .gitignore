@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 logs/
 *.pyc
 data/_ips.csv
 data/_servers.csv
-=======
-*.[pyc]
->>>>>>> 08eddba4085d21f9c5eb236c4e03a2992bdfe6d9
