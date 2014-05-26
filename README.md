@@ -1,4 +1,4 @@
-BNSblChk
+DNSblChk
 ========
 
 DNS blacklist monitor and reporting service.
