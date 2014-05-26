@@ -126,3 +126,4 @@ if __name__ == "__main__":
       ret = except_catch(exc_type.__name__, exc_value, exc_traceback)
       if ret != False:
         loggError(dnsblk_error_log, ret)
+        
