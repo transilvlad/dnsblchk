@@ -7,7 +7,7 @@ from config import config
 from dnsrbl import DNSRBLChecker
 from files import FileHandler
 from mail import MailClient
-from signals import SignalHandler, SHUTDOWN_REQUESTED, format_exception
+from signals import SignalHandler, SHUTDOWN_REQUESTED
 
 
 def dnsbl_check_handler(servers: list, ips: list, mail_client: MailClient, dnsrbl_checker: DNSRBLChecker):
@@ -63,7 +63,7 @@ def dnsbl_check_handler(servers: list, ips: list, mail_client: MailClient, dnsrb
 
     except Exception:
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        error_details = format_exception(exc_type, exc_value, exc_traceback)
+        error_details = SignalHandler.format_exception(exc_type, exc_value, exc_traceback)
         if error_details:
             FileHandler.log_error(Path(config['error_log']), error_details)
 
