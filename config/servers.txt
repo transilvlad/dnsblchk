@@ -1,0 +1,4 @@
+zen.spamhaus.org
+b.barracudacentral.org
+bl.spamcop.net
+dnsbl.sorbs.net

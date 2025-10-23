@@ -1,0 +1,19 @@
+# Configuration for dnsblchk
+
+# General settings
+run_once: true  # If true, the script will run once and then exit.
+sleep_hours: 3   # Hours to sleep between checks if run_once is false.
+
+# Email alerting
+email_report: true # If true, an email report will be sent if there are listed IPs.
+recipients:
+  - "vlad@missioninbox.com"
+from_email: "vlad@beta.obmengine.com"
+smtp_host: "localhost"
+smtp_port: 25
+
+# File paths (relative to the project root)
+servers_file: "config/servers.txt"
+ips_file: "config/ips.txt"
+log_dir: "logs/"
+error_log: "logs/error_log"

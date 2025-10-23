@@ -1,54 +1,85 @@
-# core libraries
-import os
-import sys
-import time
 import signal
-import string
-import __main__
-import traceback
+import sys
 import threading
+import traceback
 from email.utils import formatdate
 
-# capture Exceptions
-def except_catch(type, value, track, thread=None):
-  ret = False
-  if type != "SystemExit":
-    # RFC822 error timestamp
-    report = "Error time: " + formatdate(timeval=None, localtime=False, usegmt=True) + "\n"
-    
-    # thread no if set
-    if thread != "":
-      report += "Exception in thread: " + str(thread) + "\n\n"
-    
-    # get report
-    rawreport = traceback.format_exception(type, value, track)
-    report += "\n" . join(rawreport)
-    
-    # the string for logging
-    ret = ("%s\n" + "-" * 30 + "\n\n") % report
-  return ret
-sys.excepthook = except_catch
+
+class SignalHandler:
+    """Handles signal management and shutdown coordination."""
+
+    _instance = None
+
+    def __new__(cls):
+        """Singleton pattern to ensure only one instance exists."""
+        if cls._instance is None:
+            cls._instance = super(SignalHandler, cls).__new__(cls)
+            cls._instance.shutdown_requested = False
+        return cls._instance
+
+    def __init__(self):
+        """Initialize the signal handler."""
+        if not hasattr(self, 'shutdown_requested'):
+            self.shutdown_requested = False
+
+    @staticmethod
+    def format_exception(exc_type, exc_value, exc_traceback, thread_name=None):
+        """Formats an exception for logging, returning a string."""
+        if exc_type == SystemExit:
+            return None  # We don't log SystemExit exceptions
+
+        report = f"Error time: {formatdate(timeval=None, localtime=False, usegmt=True)}\n"
+        if thread_name:
+            report += f"Exception in thread: {thread_name}\n\n"
+
+        raw_report = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        report += "".join(raw_report)
+        return f"{report}\n{'-' * 30}\n\n"
+
+    def _interrupt_catch(self, signum, frame):
+        """Handles SIGINT (Ctrl+C) by initiating a graceful shutdown."""
+        print("\nShutdown signal received. Gracefully stopping...")
+        self.shutdown_requested = True
+
+    def _exit_catch(self, signum, frame):
+        """Handles SIGTERM by initiating a graceful shutdown and waiting for threads."""
+        self.shutdown_requested = True
+
+        # Wait for all threads to complete, except the main thread
+        main_thread = threading.main_thread()
+        for thread in threading.enumerate():
+            if thread is main_thread:
+                continue
+            try:
+                thread.join(timeout=2.0)
+            except RuntimeError:
+                pass  # Can't join a thread before it's started
+
+        print("All threads have been terminated. Exiting.")
+        sys.exit(0)
+
+    def setup_signal_handlers(self):
+        """Sets up the signal handlers for graceful shutdown."""
+        signal.signal(signal.SIGINT, self._interrupt_catch)
+        signal.signal(signal.SIGTERM, self._exit_catch)
+
+    @property
+    def is_shutdown_requested(self):
+        """Property to check if shutdown has been requested."""
+        return self.shutdown_requested
 
 
-# capture KeyboardInterrupt
-def interrupt_catch(signal, frame):
-  print ""
-  os._exit(1)
-signal.signal(signal.SIGINT, interrupt_catch)
+# Backward compatibility: maintain access to global flag
+SHUTDOWN_REQUESTED = False
 
 
-# capture exit signal
-def exit_catch(signal, frame):
-  # tell children to shut down
-  __main__.shutdown = True
-  
-  # wait for everything to terminate
-  while True:
-    if threading.activeCount() == 1:
-      break
-    else:
-      time.sleep(2)
-  
-  # kill parent
-  os._exit(1)
-signal.signal(signal.SIGTERM, exit_catch)
+def _get_shutdown_status():
+    """Get current shutdown status from the singleton."""
+    return SignalHandler().shutdown_requested
+
+
+# For backward compatibility - override module-level access
+def __getattr__(name):
+    if name == 'SHUTDOWN_REQUESTED':
+        return _get_shutdown_status()
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

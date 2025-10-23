@@ -1,4 +1,4 @@
+.idea/
 *.pyc
-data/_serves.csv
-data/_ips.csv
-dns/
+config/
+logs/
