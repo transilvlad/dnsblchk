@@ -34,7 +34,7 @@ def dnsbl_check_handler(servers: list, ips: list, mail_client: MailClient, dnsrb
                 is_listed = dnsrbl_checker.check(ip[0], server[0])
                 if is_listed:
                     if log_file_handler is None:
-                        log_dir = Path(config['log_dir'])
+                        log_dir = Path(config.log_dir)
                         log_dir.mkdir(exist_ok=True)
                         log_file_path = log_dir / f"dnsblchk_{int(time.time())}.log"
                         log_file_handler = open(log_file_path, 'w', newline='')
@@ -65,7 +65,7 @@ def dnsbl_check_handler(servers: list, ips: list, mail_client: MailClient, dnsrb
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_details = SignalHandler.format_exception(exc_type, exc_value, exc_traceback)
         if error_details:
-            FileHandler.log_error(Path(config['error_log']), error_details)
+            FileHandler.log_error(Path(config.error_log), error_details)
 
 
 def send_email_report(listed_ips: dict, mail_client: MailClient):
