@@ -38,6 +38,12 @@ All configuration is done in the `config.yaml` file. Here are the available opti
 -   `ips_file`: Path to the CSV file containing IPs to check.
 -   `report_dir`: Directory to store CSV report files from DNSBL checks.
 
+### DNS Nameservers
+-   `nameservers`: A list of DNS nameservers to use for DNSBL queries.
+    - Supports multiple servers for redundancy and load balancing.
+    - Example: `['208.67.222.222', '208.67.220.220']` (OpenDNS servers)
+    - If not specified, defaults to `['208.67.222.222']`
+
 ### Threading Settings
 -   `threading.enabled`: If `true`, multithreading is enabled for DNSBL checks. (Default: `true`)
 -   `threading.thread_count`: The number of worker threads to use for concurrent checks. (Default: `4`, Minimum: `1`)

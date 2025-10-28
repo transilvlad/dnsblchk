@@ -7,15 +7,20 @@ import dns.reversename
 class RBLCheck:
     """Checks if IP addresses are blacklisted on DNSBL servers."""
 
-    def __init__(self, nameserver: str = '208.67.222.222'):
+    def __init__(self, nameservers: list = None):
         """
         Initialize the DNSRBL checker.
 
         Args:
-            nameserver: The DNS nameserver to use for queries (default: OpenDNS).
+            nameservers: List of DNS nameservers to use for queries.
+                        Defaults to OpenDNS servers if not provided.
+                        Example: ['208.67.222.222', '208.67.220.220']
         """
-        # DNS nameserver to query for blacklist checks (OpenDNS by default).
-        self.nameserver = nameserver
+        # List of DNS nameservers to query for blacklist checks.
+        # Uses OpenDNS servers by default for redundancy.
+        if nameservers is None:
+            nameservers = ['208.67.222.222', '208.67.220.220']
+        self.nameservers = nameservers
 
     def check(self, ip: str, server: str) -> Union[bool, List[str]]:
         """
@@ -45,8 +50,9 @@ class RBLCheck:
 
             # Create resolver instance for DNS queries.
             resolver = dns.resolver.Resolver()
-            # Set the nameserver to use for this query.
-            resolver.nameservers = [self.nameserver]
+
+            # Set the nameservers to use for this query (supports multiple servers).
+            resolver.nameservers = self.nameservers
 
             # Query the DNSBL server for an A record (contains return code).
             answers = resolver.resolve(query_name, 'A')

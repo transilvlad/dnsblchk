@@ -186,6 +186,19 @@ class Config:
         # Return SMTP port with default of 25.
         return email_config.get('smtp_port', 25)
 
+    def get_nameservers(self) -> list:
+        """
+        Returns the list of DNS nameservers to use for DNSBL queries.
+        Supports multiple nameservers for redundancy and load balancing.
+
+        Returns:
+            list: List of nameserver addresses (default: ['208.67.222.222']).
+        """
+        # Get nameservers list from config with default OpenDNS server.
+        nameservers = self._config_data.get('nameservers', ['208.67.222.222'])
+        # Ensure we have at least one nameserver.
+        return nameservers if nameservers else ['208.67.222.222']
+
     def get_thread_count(self) -> int:
         """
         Returns the number of threads to use for concurrent DNSBL checks.

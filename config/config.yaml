@@ -9,6 +9,11 @@ servers_file: "config/servers.txt" # File containing the list of RBL servers.
 ips_file: "config/ips.txt"         # File containing the list of IP addresses to check.
 report_dir: "logs/"                # Directory for storing report files.
 
+# DNS Nameservers for DNSBL queries.
+nameservers:
+  - "208.67.222.222"  # OpenDNS nameserver.
+  - "208.67.220.220"  # OpenDNS nameserver (secondary).
+
 # Threading settings.
 threading:
   enabled: true    # Enable multithreading for DNSBL checks (default: true).

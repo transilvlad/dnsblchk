@@ -55,8 +55,9 @@ class MainApplication:
         """Initialize mail client and DNSRBL checker."""
         # Create mail client for sending email notifications.
         self.mail_client = MailClient(config.get_smtp_host(), config.get_smtp_port())
-        # Create DNSRBL checker instance for blacklist queries.
-        self.dnsrbl_checker = RBLCheck()
+
+        # Create DNSRBL checker instance with nameservers from config.
+        self.dnsrbl_checker = RBLCheck(config.get_nameservers())
 
     def _load_configuration(self):
         """Load servers and IPs from configuration files."""
