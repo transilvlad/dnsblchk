@@ -1,13 +1,13 @@
 #!/bin/bash
 # chkconfig: 2345 95 20
 # description: start, stop, status and restart
-# processname: dnsblchk
+# processname: DNS Black List Checker
 # name: dnsblchk
 
 # Configuration variables
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SRV="dnsblchk"
-PTH="$DIR""/dnsblchk.py"
+PTH="$DIR""/main.py"
 
 
 # Needed variables

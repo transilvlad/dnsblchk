@@ -51,9 +51,11 @@ class SignalHandler:
             if thread is main_thread:
                 continue
             try:
+                # Wait for thread to complete with 2-second timeout.
                 thread.join(timeout=2.0)
             except RuntimeError:
-                pass  # Can't join a thread before it's started
+                # Can't join a thread before it's started; ignore this error.
+                pass
 
         print("All threads have been terminated. Exiting.")
         sys.exit(0)

@@ -1,122 +1,142 @@
-import csv
-import sys
 import time
-from pathlib import Path
 
 from config import config
-from dnsrbl import DNSRBLChecker
+from dnscheck import DNSCheck
 from files import FileHandler
+from logger import Logger, LogConfig
 from mail import MailClient
-from signals import SignalHandler, SHUTDOWN_REQUESTED
+from rblcheck import RBLCheck
+from signals import SignalHandler
 
 
-def dnsbl_check_handler(servers: list, ips: list, mail_client: MailClient, dnsrbl_checker: DNSRBLChecker):
+class MainApplication:
     """
-    Handles the DNSBL checking process.
+    Main application class for the DNSBL checker service.
+    Orchestrates initialization, configuration loading, and the main check loop.
     """
-    if SHUTDOWN_REQUESTED:
-        return
 
-    try:
-        listed_ips = {}
-        log_file_handler = None
-        csv_writer = None
+    def __init__(self):
+        """Initialize the application with all instance variables set to None."""
+        # Logger instance for application-wide logging.
+        self.logger = None
+        # Signal handler for graceful shutdown coordination.
+        self.signal_handler = None
+        # Mail client for sending email alerts.
+        self.mail_client = None
+        # DNSRBL checker instance for querying blacklists.
+        self.dnsrbl_checker = None
+        # Check handler that orchestrates DNSBL checks.
+        self.check_handler = None
+        # List of DNSBL servers loaded from configuration.
+        self.servers = None
+        # List of IP addresses loaded from configuration.
+        self.ips = None
 
-        print(f"Checking {len(ips)} IP addresses against {len(servers)} DNSBL servers.")
+    def _setup_logger(self):
+        """Set up the logger with config-driven settings."""
+        # Create logger configuration from application config.
+        log_config = LogConfig(
+            log_file=config.log_file,
+            log_dir=config.log_dir,
+            level=config.get_log_level(),
+            console_print=config.get_console_print()
+        )
+        # Initialize logger instance with the configuration.
+        self.logger = Logger(log_config)
 
-        for server in servers:
-            if SHUTDOWN_REQUESTED:
+    def _setup_signal_handlers(self):
+        """Set up signal handlers for graceful shutdown."""
+        # Create signal handler singleton instance.
+        self.signal_handler = SignalHandler()
+        # Register SIGINT and SIGTERM signal handlers.
+        self.signal_handler.setup_signal_handlers()
+
+    def _setup_clients_and_checkers(self):
+        """Initialize mail client and DNSRBL checker."""
+        # Create mail client for sending email notifications.
+        self.mail_client = MailClient(config.get_smtp_host(), config.get_smtp_port())
+        # Create DNSRBL checker instance for blacklist queries.
+        self.dnsrbl_checker = RBLCheck()
+
+    def _load_configuration(self):
+        """Load servers and IPs from configuration files."""
+        # Load DNSBL servers from CSV file.
+        self.servers = FileHandler.load_csv(config.servers_file)
+        # Load IP addresses to check from CSV file.
+        self.ips = FileHandler.load_csv(config.ips_file)
+        # Log summary of loaded configuration.
+        self.logger.log_info(f"Loaded {len(self.servers)} DNSBL servers and {len(self.ips)} IP addresses.")
+
+    def _initialize(self):
+        """Initialize all application components in proper order."""
+        # Set up logging first so subsequent initialization is logged.
+        self._setup_logger()
+        self.logger.log_info("DNSblChk service started.")
+
+        # Set up signal handlers to allow graceful shutdown.
+        self._setup_signal_handlers()
+        # Initialize SMTP and DNS clients.
+        self._setup_clients_and_checkers()
+        # Load servers and IP addresses from configuration files.
+        self._load_configuration()
+
+        # Create check handler with initialized clients.
+        self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger)
+
+    def _run_checks(self):
+        """Run the DNSBL checks against all servers and IPs."""
+        # Delegate to check handler to perform the actual checks.
+        self.check_handler.run(self.servers, self.ips)
+
+    def _sleep_with_shutdown_check(self, duration: int):
+        """
+        Sleep for a specified duration while allowing graceful shutdown.
+        Checks shutdown status every 10 seconds to enable quick response to signals.
+
+        Args:
+            duration: Sleep duration in seconds.
+        """
+        # Split sleep into 10-second intervals to check for shutdown signals.
+        for _ in range(int(duration / 10)):
+            # Exit early if shutdown signal has been received.
+            if self.signal_handler.is_shutdown_requested:
                 break
-            for ip in ips:
-                if SHUTDOWN_REQUESTED:
+            # Sleep for 10 seconds before checking shutdown status again.
+            time.sleep(10)
+
+    def run(self):
+        """Run the main application loop with proper initialization and cleanup."""
+        # Initialize all components before entering the main loop.
+        self._initialize()
+
+        try:
+            # Main event loop: continue running until shutdown is requested.
+            while not self.signal_handler.is_shutdown_requested:
+                # Execute DNSBL checks for all configured servers and IPs.
+                self._run_checks()
+
+                # Check if run-once mode is enabled (useful for testing).
+                if config.run_once:
+                    self.logger.log_debug("Run-once mode enabled. Exiting.")
                     break
 
-                is_listed = dnsrbl_checker.check(ip[0], server[0])
-                if is_listed:
-                    if log_file_handler is None:
-                        log_dir = Path(config.log_dir)
-                        log_dir.mkdir(exist_ok=True)
-                        log_file_path = log_dir / f"dnsblchk_{int(time.time())}.log"
-                        log_file_handler = open(log_file_path, 'w', newline='')
-                        csv_writer = csv.writer(log_file_handler)
+                # Calculate sleep duration from configuration (in hours).
+                sleep_duration = config.sleep_hours * 3600
+                self.logger.log_info(f"Sleeping for {config.sleep_hours} hours...")
+                # Sleep while checking for shutdown signals periodically.
+                self._sleep_with_shutdown_check(sleep_duration)
 
-                    timestamp = time.strftime("%d %b %Y %H:%M:%S", time.gmtime())
-                    csv_writer.writerow([timestamp, ip[0], server[0], is_listed[1]])
-                    log_file_handler.flush()
-
-                    if ip[0] not in listed_ips:
-                        listed_ips[ip[0]] = []
-                    listed_ips[ip[0]].append(server[0])
-                    print(f"DIRTY: {ip[0]} is listed on {server[0]}")
-                else:
-                    print(f"CLEAN: {ip[0]} is not listed on {server[0]}")
-
-                time.sleep(0.01)
-
-        if log_file_handler:
-            log_file_handler.close()
-
-        print(f"Found {len(listed_ips)} listed IP addresses.")
-
-        if listed_ips and config.get('email_report', False):
-            send_email_report(listed_ips, mail_client)
-
-    except Exception:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        error_details = SignalHandler.format_exception(exc_type, exc_value, exc_traceback)
-        if error_details:
-            FileHandler.log_error(Path(config.error_log), error_details)
-
-
-def send_email_report(listed_ips: dict, mail_client: MailClient):
-    """
-    Sends an email report of the listed IP addresses.
-    """
-    mail_text = "The following IP addresses were found on one or more DNS blacklists:\n\n"
-    for ip, servers in listed_ips.items():
-        mail_text += f"{ip} ===> {', '.join(servers)}\n"
-
-    for recipient in config.recipients:
-        success, error = mail_client.send_plain(
-            to_email=recipient,
-            from_email=config.from_email,
-            subject="DNSBL Alert: Listed IP Addresses",
-            message=mail_text
-        )
-        if not success:
-            error_log_path = Path(config.error_log)
-            FileHandler.log_error(error_log_path, f"Mailer error: {error}")
+        finally:
+            # Ensure cleanup happens regardless of how the loop exits.
+            self.logger.log_info("DNSblChk service shutdown complete.")
 
 
 def main():
     """
-    Main function to run the DNSBL checker.
+    Main entry point for the DNSBL checker service.
     """
-    signal_handler = SignalHandler()
-    signal_handler.setup_signal_handlers()
-    mail_client = MailClient(config.smtp_host, config.smtp_port)
-    dnsrbl_checker = DNSRBLChecker()
-
-    servers = FileHandler.load_csv(Path(config.servers_file))
-    ips = FileHandler.load_csv(Path(config.ips_file))
-
-    while not SHUTDOWN_REQUESTED:
-        dnsbl_check_handler(servers, ips, mail_client, dnsrbl_checker)
-
-        if getattr(config, 'run_once', False):
-            print("Run-once mode enabled. Exiting.")
-            break
-
-        sleep_duration = getattr(config, 'sleep_hours', 3) * 3600
-        print(f"Sleeping for {getattr(config, 'sleep_hours', 3)} hours...")
-
-        # Sleep in small intervals to allow for graceful shutdown
-        for _ in range(int(sleep_duration / 10)):
-            if SHUTDOWN_REQUESTED:
-                break
-            time.sleep(10)
-
-    print("Shutdown complete.")
+    app = MainApplication()
+    app.run()
 
 
 if __name__ == "__main__":

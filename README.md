@@ -6,11 +6,11 @@ DNSblChk is a modern, open-source Python service for monitoring and reporting on
 
 -   **Modern Python**: Refactored for Python 3 with type hints and current best practices.
 -   **Easy Configuration**: All settings are managed in a single `config/config.yaml` file.
--   **Flexible Operation**: Can be run as a continuous monitoring service or as a one-time check.
+-   **CSV Reports**: Records all findings in CSV files for easy analysis.
 -   **Email Alerts**: Sends detailed email notifications when listed IP addresses are found.
--   **CSV Logging**: Records all findings in CSV files for easy analysis.
--   **Graceful Shutdown**: Handles interrupt signals to shut down cleanly.
--   **Unit Tested**: Core functionalities are covered by unit tests.
+-   **Flexible Operation**: Can be run as a continuous monitoring service or as a one-time check.
+-   **Multithreading Support**: Run DNSBL checks across multiple threads for improved performance.
+-   **Advanced Logging**: Configurable logging levels (DEBUG, INFO, WARN, ERROR) with console and file output control.
 
 ## Installation
 
@@ -29,17 +29,33 @@ DNSblChk is a modern, open-source Python service for monitoring and reporting on
 
 All configuration is done in the `config.yaml` file. Here are the available options:
 
+### General Settings
 -   `run_once`: If `true`, the script will run once and then exit. (Default: `false`)
 -   `sleep_hours`: The number of hours to wait between checks. (Default: `3`)
--   `email_report`: If `true`, an email report will be sent if any IPs are listed. (Default: `true`)
--   `recipients`: A list of email addresses to receive alerts.
--   `from_email`: The "From" address for email alerts.
--   `smtp_host`: The hostname or IP address of your SMTP server.
--   `smtp_port`: The port for your SMTP server.
+
+### File Paths
 -   `servers_file`: Path to the CSV file containing DNSBL servers.
 -   `ips_file`: Path to the CSV file containing IPs to check.
--   `log_dir`: Directory to store log files.
--   `error_log`: Path to the file for logging errors.
+-   `report_dir`: Directory to store CSV report files from DNSBL checks.
+
+### Threading Settings
+-   `threading.enabled`: If `true`, multithreading is enabled for DNSBL checks. (Default: `true`)
+-   `threading.thread_count`: The number of worker threads to use for concurrent checks. (Default: `4`, Minimum: `1`)
+    - Increase this value for faster checks but higher resource usage.
+    - Decrease for lower resource usage but slower checks.
+
+### Email Alerting
+-   `email.enabled`: If `true`, an email report will be sent if any IPs are listed. (Default: `false`)
+-   `email.recipients`: A list of email addresses to receive alerts.
+-   `email.sender`: The "From" address for email alerts.
+-   `email.smtp_host`: The hostname or IP address of your SMTP server.
+-   `email.smtp_port`: The port for your SMTP server. (Default: `25`)
+
+### Logging Settings
+-   `logging.level`: Logging level for the application. Can be `DEBUG`, `INFO`, `WARN`, or `ERROR`. (Default: `INFO`)
+-   `logging.console_print`: If `true`, log messages will be printed to console in addition to the log file. (Default: `true`)
+-   `logging.log_dir`: Directory to store log files.
+-   `logging.log_file`: Path to the main log file for logging errors and events.
 
 ## Usage
 
