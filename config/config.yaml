@@ -1,4 +1,4 @@
-# Configuration for DNS Black List Checker.
+# Configuration for DNS Block List Checker.
 
 # General settings.
 run_once: true  # If true, the script will run once and then exit.

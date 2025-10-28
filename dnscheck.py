@@ -247,7 +247,7 @@ class DNSCheck:
             success, error = self.mail_client.send_plain(
                 to_email=recipient,
                 from_email=config.get_email_sender(),
-                subject="DNS Black List Alert",
+                subject="DNS Block List Alert",
                 message=mail_text
             )
             # Log any email sending errors.

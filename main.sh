@@ -1,7 +1,7 @@
 #!/bin/bash
 # chkconfig: 2345 95 20
 # description: start, stop, status and restart
-# processname: DNS Black List Checker
+# processname: DNS Block List Checker
 # name: dnsblchk
 
 # Configuration variables
