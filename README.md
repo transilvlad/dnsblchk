@@ -1,4 +1,4 @@
-# DNS Block List Chcker (DNSblChk)
+# DNS Block List Checker (DNSblChk)
 
 DNSblChk is an open-source Python script and service for monitoring and reporting on DNS blacklists.
 It is designed for ease of use, with a straightforward configuration and clear reporting.
