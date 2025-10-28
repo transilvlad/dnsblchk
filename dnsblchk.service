@@ -1,0 +1,59 @@
+[Unit]
+Description=DNS Black List Checker
+Documentation=file:///usr/share/doc/dnsblchk/README.md
+After=network.target network-online.target syslog.target
+Wants=network-online.target
+
+[Service]
+# Service type: simple means the process runs in foreground
+Type=simple
+
+# User and group to run the service as
+User=dnsblchk
+Group=dnsblchk
+
+# Working directory
+WorkingDirectory=/opt/dnsblchk
+
+# Main command to execute
+ExecStart=/usr/bin/python3 /opt/dnsblchk/main.py
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+MaxStartStopSec=60
+
+# Process management
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/dnsblchk /var/run/dnsblchk /opt/dnsblchk/logs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dnsblchk
+SyslogFacility=daemon
+SyslogLevel=info
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Environment variables (if needed)
+# Environment="PYTHONDONTWRITEBYTECODE=1"
+# Environment="PYTHONUNBUFFERED=1"
+
+# Set up memory limits if needed (example: 512MB)
+# MemoryLimit=512M
+
+[Install]
+# Target to include this service in
+WantedBy=multi-user.target
+
