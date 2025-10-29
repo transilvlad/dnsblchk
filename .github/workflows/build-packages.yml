@@ -173,10 +173,16 @@ jobs:
         run: |
           rpmbuild -ba ~/rpmbuild/SPECS/dnsblchk.spec
           echo "Built RPMs:" && ls -1 ~/rpmbuild/RPMS/noarch || true
+      - name: Sanitize image name
+        id: img
+        run: |
+          IMAGE="${{ matrix.image }}"
+          SAFE="${IMAGE//:/-}"
+          echo "safe_image=$SAFE" >> $GITHUB_OUTPUT
       - name: Upload RPM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rpm-package-${{ matrix.image }}
+          name: rpm-package-${{ steps.img.outputs.safe_image }}
           path: ~/rpmbuild/RPMS/noarch/dnsblchk-*.rpm
 
   build-deb:
