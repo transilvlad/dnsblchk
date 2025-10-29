@@ -53,8 +53,15 @@ class MainApplication:
 
     def _setup_clients_and_checkers(self):
         """Initialize mail client and DNSRBL checker."""
-        # Create mail client for sending email notifications.
-        self.mail_client = MailClient(config.get_smtp_host(), config.get_smtp_port())
+        # Create mail client for sending email notifications with auth and encryption settings.
+        self.mail_client = MailClient(
+            smtp_host=config.get_smtp_host(),
+            smtp_port=config.get_smtp_port(),
+            smtp_user=config.get_smtp_user() or None,
+            smtp_password=config.get_smtp_password() or None,
+            use_tls=config.get_smtp_use_tls(),
+            use_ssl=config.get_smtp_use_ssl()
+        )
 
         # Create DNSRBL checker instance with nameservers from config.
         self.dnsrbl_checker = RBLCheck(config.get_nameservers())

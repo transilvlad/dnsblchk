@@ -92,7 +92,7 @@ class TestMailClient:
         success, error = client.send_plain(
             to_email='test+tag@example.com',
             from_email='sender@example.com',
-            subject='Subject with émojis 😊',
+            subject='Subject with émojis ���',
             message='Message with special chars: @#$%^&*()'
         )
 
@@ -221,5 +221,51 @@ class TestMailClient:
         assert len(result) == 2
         assert isinstance(result[0], bool)
 
+    # New tests for authentication and encryption
+    @patch('mail.smtplib.SMTP')
+    def test_send_plain_with_authentication(self, mock_smtp):
+        """Test SMTP authentication occurs when username/password provided."""
+        client = MailClient(smtp_host='localhost', smtp_port=587, smtp_user='user', smtp_password='pass')
+        mock_conn = MagicMock()
+        mock_smtp.return_value.__enter__.return_value = mock_conn
+
+        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+
+        mock_conn.login.assert_called_once_with('user', 'pass')
+
+    @patch('mail.smtplib.SMTP')
+    def test_send_plain_without_authentication(self, mock_smtp):
+        """Test SMTP authentication does not occur when credentials missing."""
+        client = MailClient(smtp_host='localhost', smtp_port=587)
+        mock_conn = MagicMock()
+        mock_smtp.return_value.__enter__.return_value = mock_conn
+
+        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+
+        mock_conn.login.assert_not_called()
+
+    @patch('mail.smtplib.SMTP')
+    def test_send_plain_with_starttls(self, mock_smtp):
+        """Test STARTTLS is invoked when use_tls is True and use_ssl is False."""
+        client = MailClient(smtp_host='localhost', smtp_port=587, use_tls=True, use_ssl=False)
+        mock_conn = MagicMock()
+        mock_smtp.return_value.__enter__.return_value = mock_conn
+
+        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+
+        mock_conn.starttls.assert_called_once()
+
+    @patch('mail.smtplib.SMTP_SSL')
+    def test_send_plain_with_ssl(self, mock_smtp_ssl):
+        """Test implicit SSL connection when use_ssl is True."""
+        client = MailClient(smtp_host='localhost', smtp_port=465, use_tls=True, use_ssl=True)
+        mock_conn = MagicMock()
+        mock_smtp_ssl.return_value.__enter__.return_value = mock_conn
+
+        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+
+        # STARTTLS should not be called when SSL is used
+        mock_conn.starttls.assert_not_called()
+        mock_smtp_ssl.assert_called_once_with('localhost', 465)
 
 """Test suite for DNSBL Checker application."""

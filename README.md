@@ -62,6 +62,39 @@ All configuration is done in the `config.yaml` file. Here are the available opti
 -   `email.sender`: The "From" address for email alerts.
 -   `email.smtp_host`: The hostname or IP address of your SMTP server.
 -   `email.smtp_port`: The port for your SMTP server. (Default: `25`)
+-   `email.smtp_user`: (Optional) Username for SMTP authentication. Leave blank if not required.
+-   `email.smtp_password`: (Optional) Password for SMTP authentication. Leave blank if not required.
+-   `email.use_tls`: If `true`, enables STARTTLS after connecting (typical for port 587).
+-   `email.use_ssl`: If `true`, uses implicit SSL (typical for port 465). Overrides `use_tls` if both are `true`.
+
+Examples:
+```
+# STARTTLS on port 587
+email:
+  enabled: true
+  recipients: ["ops@example.com"]
+  sender: "dnsblchk@example.com"
+  smtp_host: "smtp.example.com"
+  smtp_port: 587
+  smtp_user: "dnsblchk"
+  smtp_password: "changeMe"
+  use_tls: true
+  use_ssl: false
+
+# Implicit SSL on port 465
+email:
+  enabled: true
+  recipients: ["ops@example.com"]
+  sender: "dnsblchk@example.com"
+  smtp_host: "smtp.example.com"
+  smtp_port: 465
+  smtp_user: "dnsblchk"
+  smtp_password: "changeMe"
+  use_tls: false
+  use_ssl: true
+```
+
+Security tip: Prefer environment-specific secrets management (e.g., Ansible Vault, Kubernetes secrets) to store `smtp_password` instead of committing plain text to version control.
 
 ### Logging Settings
 -   `logging.level`: Logging level for the application. Can be `DEBUG`, `INFO`, `WARN`, or `ERROR`. (Default: `INFO`)

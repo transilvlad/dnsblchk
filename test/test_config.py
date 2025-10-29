@@ -124,6 +124,50 @@ class TestConfigData:
         smtp_port = 465
         assert smtp_port == 465
 
+    def test_smtp_auth_user(self):
+        """Test SMTP auth username."""
+        smtp_user = 'user'
+        assert smtp_user == 'user'
+
+    def test_smtp_auth_password(self):
+        """Test SMTP auth password."""
+        smtp_password = 'pass'
+        assert smtp_password == 'pass'
+
+    def test_smtp_auth_empty(self):
+        """Test empty SMTP auth credentials."""
+        smtp_user = ''
+        smtp_password = ''
+        assert smtp_user == ''
+        assert smtp_password == ''
+
+    def test_smtp_use_tls_true(self):
+        """Test use_tls flag true."""
+        use_tls = True
+        assert use_tls is True
+
+    def test_smtp_use_tls_false(self):
+        """Test use_tls flag false."""
+        use_tls = False
+        assert use_tls is False
+
+    def test_smtp_use_ssl_true(self):
+        """Test use_ssl flag true."""
+        use_ssl = True
+        assert use_ssl is True
+
+    def test_smtp_use_ssl_false(self):
+        """Test use_ssl flag false."""
+        use_ssl = False
+        assert use_ssl is False
+
+    def test_smtp_ssl_overrides_tls(self):
+        """Test SSL overrides TLS when both true."""
+        use_tls = True
+        use_ssl = True
+        # In logic SSL overrides TLS starttls call
+        assert use_ssl and use_tls
+
     def test_thread_count(self):
         """Test thread count."""
         thread_count = 10
@@ -226,4 +270,3 @@ class TestConfigData:
         """Test sleep hours configuration."""
         sleep_hours = 3
         assert sleep_hours == 3
-

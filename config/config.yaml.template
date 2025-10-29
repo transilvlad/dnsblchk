@@ -1,37 +1,42 @@
 # /etc/dnsblchk/config.yaml
 
 # General settings.
-run_once: false
-sleep_hours: 3
+run_once: false  # If true, the script will run once and then exit.
+sleep_hours: 3   # Hours to sleep between checks if run_once is false.
 
-# File paths
-servers_file: "/etc/dnsblchk/servers.txt"
-ips_file: "/etc/dnsblchk/ips.txt"
-report_dir: "/var/log/dnsblchk/"
+# File paths.
+servers_file: "/etc/dnsblchk/servers.txt" # File containing the list of RBL servers.
+ips_file: "/etc/dnsblchk/ips.txt"         # File containing the list of IP addresses to check.
+report_dir: "/var/log/dnsblchk/"          # Directory for storing report files.
 
-# DNS Nameservers
+# DNS Nameservers for DNSBL queries.
 nameservers:
-  - "208.67.222.222"
-  - "208.67.220.220"
+  - "208.67.222.222"  # OpenDNS nameserver.
+  - "208.67.220.220"  # OpenDNS nameserver (secondary).
 
-# Threading settings
+# Threading settings.
 threading:
-  enabled: true
-  thread_count: 10
+  enabled: true    # Enable multithreading for DNSBL checks (default: true).
+  thread_count: 10 # Number of worker threads (default: 10, minimum: 1).
 
-# Email alerting
+# Email alerting.
 email:
-  enabled: false
+  enabled: false # If true, an email report will be sent if there are listed IPs.
   recipients:
     - "tony@example.com"
   sender: "dnsblchk@example.com"
   smtp_host: "localhost"
   smtp_port: 25
+  # Optional SMTP authentication.
+  smtp_user: ""         # Username for SMTP AUTH (leave empty if not needed).
+  smtp_password: ""     # Password for SMTP AUTH (leave empty if not needed).
+  # Encryption settings (choose one).
+  use_tls: false         # Use STARTTLS (typical port 587).
+  use_ssl: false         # Use implicit SSL (typical port 465). If true, overrides use_tls.
 
-# Logging settings
+# Logging settings.
 logging:
-  level: "INFO"
-  console_print: false
-  log_dir: "/var/log/dnsblchk/"
-  log_file: "dnsblchk.log"
-
+  level: "INFO"                 # Logging level: DEBUG, INFO, WARN, ERROR (default: INFO).
+  console_print: false          # Print logs to console in addition to file (default: true).
+  log_dir: "/var/log/dnsblchk/" # Directory for log files.
+  log_file: "dnsblchk.log"      # Log filename (will be combined with log_dir).

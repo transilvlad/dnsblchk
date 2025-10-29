@@ -186,6 +186,26 @@ class Config:
         # Return SMTP port with default of 25.
         return email_config.get('smtp_port', 25)
 
+    def get_smtp_user(self) -> str:
+        """Return SMTP username for authentication (empty if not set)."""
+        email_config = self._config_data.get('email', {})
+        return email_config.get('smtp_user', '')
+
+    def get_smtp_password(self) -> str:
+        """Return SMTP password for authentication (empty if not set)."""
+        email_config = self._config_data.get('email', {})
+        return email_config.get('smtp_password', '')
+
+    def get_smtp_use_tls(self) -> bool:
+        """Return whether STARTTLS should be used."""
+        email_config = self._config_data.get('email', {})
+        return email_config.get('use_tls', False)
+
+    def get_smtp_use_ssl(self) -> bool:
+        """Return whether implicit SSL should be used (overrides TLS)."""
+        email_config = self._config_data.get('email', {})
+        return email_config.get('use_ssl', False)
+
     def get_nameservers(self) -> list:
         """
         Returns the list of DNS nameservers to use for DNSBL queries.
