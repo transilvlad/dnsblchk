@@ -26,6 +26,11 @@ It is designed for ease of use, with a straightforward configuration and clear r
     pip install -r requirements.txt
     ```
 
+## Packaging
+
+For instructions on how to package the application into an RPM,
+please see the [Packaging Guide](PACKAGING.md).
+
 ## Configuration
 
 All configuration is done in the `config.yaml` file. Here are the available options:
