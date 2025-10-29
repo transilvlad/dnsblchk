@@ -24,6 +24,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Show Python version
         id: pyver
         run: |
@@ -72,6 +79,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Cache pip (RPM build)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-rpm-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-rpm-
       - name: Install build dependencies
         run: |
           set -e
@@ -99,8 +113,6 @@ jobs:
       - name: Capture version
         id: version
         run: |
-          # Use python3 in container images where `python` may not exist.
-          # Try tomllib (py3.11+), fall back to tomli; install tomli if needed.
           VERSION=$(python3 -c 'import tomllib, pathlib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])' 2>/dev/null \
             || python3 -c 'import tomli, pathlib; print(tomli.load(open("pyproject.toml","rb"))["project"]["version"])' 2>/dev/null \
             || (python3 -m pip install tomli && python3 -c 'import tomli, pathlib; print(tomli.load(open("pyproject.toml","rb"))["project"]["version"])') )
@@ -136,6 +148,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Cache pip (DEB build)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-deb-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-deb-
       - name: Install build tools
         run: |
           sudo apt update
@@ -143,7 +162,6 @@ jobs:
           python -m pip install --upgrade pip setuptools packaging wheel build
       - name: Prepare debian metadata
         run: |
-          # Robustly read version using python (prefer tomllib, fall back to tomli and install it if missing).
           VERSION=$(python3 -c 'import tomllib, pathlib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])' 2>/dev/null \
             || python3 -c 'import tomli, pathlib; print(tomli.load(open("pyproject.toml","rb"))["project"]["version"])' 2>/dev/null \
             || (python3 -m pip install tomli && python3 -c 'import tomli, pathlib; print(tomli.load(open("pyproject.toml","rb"))["project"]["version"])') )
@@ -228,6 +246,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Cache pip (publish release build)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-publish-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-publish-
       - name: Build Python distributions
         run: |
           python -m pip install --upgrade pip build
