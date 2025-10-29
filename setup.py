@@ -13,6 +13,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/example/dnsblchk",
     packages=find_packages(exclude=["test", "test.*"]),
+    py_modules=["config","dnscheck","files","logger","mail","main","rblcheck","signals"],
     include_package_data=True,
     install_requires=[
         "pyyaml",
@@ -34,4 +35,3 @@ setup(
         ('/usr/lib/systemd/system', ['dnsblchk.service']),
     ]
 )
-

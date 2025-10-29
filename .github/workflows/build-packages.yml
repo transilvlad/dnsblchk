@@ -147,8 +147,15 @@ jobs:
           %files
           %license LICENSE
           %doc README.md
-          %{python3_sitelib}/%{src_name}/*
-          %{python3_sitelib}/%{src_name}-*.dist-info/*
+          %{python3_sitelib}/config.py
+          %{python3_sitelib}/dnscheck.py
+          %{python3_sitelib}/files.py
+          %{python3_sitelib}/logger.py
+          %{python3_sitelib}/mail.py
+          %{python3_sitelib}/main.py
+          %{python3_sitelib}/rblcheck.py
+          %{python3_sitelib}/signals.py
+          %{python3_sitelib}/dnsblchk-*.dist-info/*
           %{_bindir}/dnsblchk
           %config(noreplace) %{_sysconfdir}/%{src_name}/config.yaml
           %{_unitdir}/dnsblchk.service
@@ -222,8 +229,14 @@ jobs:
       - name: Build DEB package
         run: |
           dpkg-buildpackage -us -uc -b
+      - name: Collect DEB artifact
+        run: |
+          mkdir -p deb-artifacts
+          cp ../dnsblchk_*_all.deb deb-artifacts/ 2>/dev/null || true
+          cp ../dnsblchk_*_amd64.deb deb-artifacts/ 2>/dev/null || true
+          ls -l deb-artifacts || true
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
-          path: ../dnsblchk_*_all.deb
+          path: deb-artifacts/*.deb
