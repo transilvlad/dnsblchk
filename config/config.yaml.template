@@ -1,0 +1,37 @@
+# /etc/dnsblchk/config.yaml
+
+# General settings.
+run_once: false
+sleep_hours: 3
+
+# File paths
+servers_file: "/etc/dnsblchk/servers.txt"
+ips_file: "/etc/dnsblchk/ips.txt"
+report_dir: "/var/log/dnsblchk/"
+
+# DNS Nameservers
+nameservers:
+  - "208.67.222.222"
+  - "208.67.220.220"
+
+# Threading settings
+threading:
+  enabled: true
+  thread_count: 10
+
+# Email alerting
+email:
+  enabled: false
+  recipients:
+    - "tony@example.com"
+  sender: "dnsblchk@example.com"
+  smtp_host: "localhost"
+  smtp_port: 25
+
+# Logging settings
+logging:
+  level: "INFO"
+  console_print: false
+  log_dir: "/var/log/dnsblchk/"
+  log_file: "dnsblchk.log"
+

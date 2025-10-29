@@ -1,5 +1,5 @@
 [Unit]
-Description=DNS Black List Checker
+Description=DNS Block List Checker
 Documentation=file:///usr/share/doc/dnsblchk/README.md
 After=network.target network-online.target syslog.target
 Wants=network-online.target
