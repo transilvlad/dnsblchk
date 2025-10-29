@@ -12,7 +12,6 @@ BuildArch:      noarch
 BuildRequires:  python3
 BuildRequires:  python3-pip
 BuildRequires:  python3-setuptools
-BuildRequires:  python3-wheel
 
 Requires:       python3
 Requires:       python3-pip
@@ -76,5 +75,4 @@ echo "Start: systemctl start dnsblchk.service"
 
 %changelog
 * Wed Oct 29 2025 GitHub Actions <actions@github.com> - @VERSION@-1
-- Maintained spec file introduced.
-
+- Maintained spec file introduced; removed python3-wheel build requirement.
