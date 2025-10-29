@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  dnsblchk:
+    build: .
+    image: ghcr.io/transilvlad/dnsblchk:latest
+    container_name: dnsblchk
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: "UTC"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    command: []

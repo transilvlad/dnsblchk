@@ -1,0 +1,32 @@
+# Ignore VCS + metadata
+.git
+.gitignore
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Test + local artifacts
+test/
+*.pytest_cache/
+*.coverage
+.coverage*
+.cache/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs (except we mount runtime logs directory)
+logs/
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
