@@ -9,8 +9,8 @@ description = "A DNS Blacklist Checker service."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [ { name = "DNSBL Checker", email = "contact@example.com" } ]
-homepage = "https://github.com/example/dnsblchk"
 requires-python = ">=3.9"
+urls = { homepage = "https://github.com/example/dnsblchk" }
 keywords = ["dns", "blacklist", "monitoring", "email", "rbl"]
 classifiers = [
   "Programming Language :: Python :: 3",
