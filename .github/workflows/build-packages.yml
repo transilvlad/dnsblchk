@@ -3,6 +3,7 @@ name: Build Packages
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
 
 concurrency:
@@ -192,3 +193,54 @@ jobs:
         with:
           name: deb-package
           path: deb-artifacts/*.deb
+
+  publish-release:
+    # New job: create GitHub Release with artifacts when tagging a version
+    needs: [build-rpm, build-deb]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download RPM artifact (rockylinux)
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-package-rockylinux-9
+          path: artifacts/rpm
+      - name: Download RPM artifact (almalinux)
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-package-almalinux-9
+          path: artifacts/rpm
+      - name: Download RPM artifact (fedora)
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-package-fedora-latest
+          path: artifacts/rpm
+      - name: Download DEB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-package
+          path: artifacts/deb
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Python distributions
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -l dist
+      - name: Create Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+            artifacts/rpm/*.rpm
+            artifacts/deb/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
