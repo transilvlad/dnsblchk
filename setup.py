@@ -30,8 +30,4 @@ setup(
         "Operating System :: POSIX :: Linux",
     ],
     python_requires='>=3.6',
-    data_files=[
-        ('/etc/dnsblchk', ['config/config.yaml.template']),
-        ('/usr/lib/systemd/system', ['dnsblchk.service']),
-    ]
 )

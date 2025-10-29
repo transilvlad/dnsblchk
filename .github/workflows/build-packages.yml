@@ -105,6 +105,7 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           cat << 'EOF' > ~/rpmbuild/SPECS/dnsblchk.spec
           %global src_name dnsblchk
+          %define __brp_python_bytecompile %{nil}
           Name:           %{src_name}
           Version:        VERSION_PLACEHOLDER
           Release:        1%{?dist}
@@ -125,7 +126,6 @@ jobs:
           %build
           # Pure Python; nothing to compile.
           %install
-          # Ensure wheel is available to avoid legacy install; ignore errors if already present.
           pip3 install --no-cache-dir wheel || :
           pip3 install --root %{buildroot} --no-deps .
           install -d -m 755 %{buildroot}/%{_sysconfdir}/%{src_name}
@@ -157,6 +157,7 @@ jobs:
           %{python3_sitelib}/main.py
           %{python3_sitelib}/rblcheck.py
           %{python3_sitelib}/signals.py
+          %{python3_sitelib}/dnsblchk-*.dist-info/*
           %{_bindir}/dnsblchk
           %config(noreplace) %{_sysconfdir}/%{src_name}/config.yaml
           %{_unitdir}/dnsblchk.service
