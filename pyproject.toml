@@ -31,10 +31,10 @@ py-modules = ["config","dnscheck","files","logger","mail","main","rblcheck","sig
 
 [tool.setuptools.package-data]
 # Include service file and config directory contents.
-"" = ["dnsblchk.service"]
+"*" = ["dnsblchk.service"]
 
 [tool.setuptools.exclude-package-data]
-"" = ["test/*"]
+"*" = ["test/*"]
 
 [tool.setuptools.dynamic]
 # (Not used now; kept for future expansion.)
