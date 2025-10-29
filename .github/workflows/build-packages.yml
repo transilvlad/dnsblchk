@@ -155,7 +155,7 @@ jobs:
           %{python3_sitelib}/main.py
           %{python3_sitelib}/rblcheck.py
           %{python3_sitelib}/signals.py
-          %{python3_sitelib}/dnsblchk-*.dist-info/*
+          %{python3_sitelib}/dnsblchk.egg-info/*
           %{_bindir}/dnsblchk
           %config(noreplace) %{_sysconfdir}/%{src_name}/config.yaml
           %{_unitdir}/dnsblchk.service
