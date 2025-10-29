@@ -90,7 +90,7 @@ jobs:
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
       - name: Create source distribution
         run: |
-          python -m build --sdist
+          python3 -m build --sdist
           ls -l dist
       - name: Copy source distribution to SOURCES
         run: |
@@ -183,7 +183,6 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y build-essential debhelper dh-python python3-all python3-setuptools python3-pip fakeroot
-          # Ensure modern packaging stack here too (optional but keeps consistency)
           python -m pip install --upgrade pip setuptools packaging wheel build
       - name: Prepare debian metadata
         run: |
@@ -205,7 +204,6 @@ jobs:
           Description: DNS Blacklist Checker service
            Monitors IPs against DNSBLs and can email alerts.
           EOF
-          echo '13' > debian/compat
           cat > debian/rules <<'EOF'
           #!/usr/bin/make -f
           %:
