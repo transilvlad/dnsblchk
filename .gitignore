@@ -2,4 +2,4 @@
 *.pyc
 logs/
 dist/
-dnsblchk.egg-info/
+*.egg-info/
