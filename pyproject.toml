@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dnsblchk"
+version = "1.0.0"
+description = "A DNS Blacklist Checker service."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [ { name = "DNSBL Checker", email = "contact@example.com" } ]
+homepage = "https://github.com/example/dnsblchk"
+requires-python = ">=3.9"
+keywords = ["dns", "blacklist", "monitoring", "email", "rbl"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+  "pyyaml",
+  "dnspython"
+]
+
+[project.scripts]
+dnsblchk = "main:main"
+
+[tool.setuptools]
+# Explicitly list py_modules since sources are top-level, not in a package dir.
+py-modules = ["config","dnscheck","files","logger","mail","main","rblcheck","signals"]
+
+[tool.setuptools.package-data]
+# Include service file and config directory contents.
+"" = ["dnsblchk.service"]
+
+[tool.setuptools.exclude-package-data]
+"" = ["test/*"]
+
+[tool.setuptools.dynamic]
+# (Not used now; kept for future expansion.)
+

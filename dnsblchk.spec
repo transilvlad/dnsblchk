@@ -72,7 +72,3 @@ echo "Start: systemctl start dnsblchk.service"
 %{_unitdir}/dnsblchk.service
 /var/log/%{src_name}
 /var/run/%{src_name}
-
-%changelog
-* Wed Oct 29 2025 GitHub Actions <actions@github.com> - @VERSION@-1
-- Maintained spec file introduced; removed python3-wheel build requirement.

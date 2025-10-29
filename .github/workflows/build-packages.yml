@@ -98,7 +98,7 @@ jobs:
       - name: Capture version
         id: version
         run: |
-          VERSION=$(python3 setup.py --version)
+          VERSION=$(python -c "import tomllib; data = tomllib.load(open('pyproject.toml','rb')); print(data['project']['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Create .spec file
         run: |
