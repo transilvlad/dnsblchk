@@ -300,17 +300,9 @@ class DNSCheck:
             "ips": self.listed_ips,
             "count": len(self.listed_ips)
         }
-
-        self.logger.log_debug(f"Webhook payload prepared: count={webhook_data['count']}, ips={list(self.listed_ips.keys())}")
-
-        # Send webhook notification.
+        # Send notification and log result
         success, errors = self.webhook_client.send_notification(webhook_data)
-
-        # Log webhook errors if any occurred.
-        if not success and errors:
-            self.logger.log_warn(f"Webhook notification completed with errors: {len(errors)} error(s)")
-            for error_msg in errors:
-                self.logger.log_error(f"Webhook error: {error_msg}")
-        elif success:
-            self.logger.log_info(f"Webhook notification completed successfully for {len(self.listed_ips)} listed IP(s)")
-
+        if success:
+            self.logger.log_info(f"Webhook notification sent successfully for {len(self.listed_ips)} listed IP(s)")
+        else:
+            self.logger.log_warn(f"Webhook notification failed with errors: {errors}")

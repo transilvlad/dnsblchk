@@ -64,6 +64,7 @@ echo "Start: systemctl start dnsblchk.service"
 %{python3_sitelib}/main.py
 %{python3_sitelib}/rblcheck.py
 %{python3_sitelib}/signals.py
+%{python3_sitelib}/webhook.py
 %dir %{python3_sitelib}/__pycache__
 %{python3_sitelib}/__pycache__/*.pyc
 %{python3_sitelib}/dnsblchk-*.dist-info/*

@@ -106,6 +106,7 @@ class MainApplication:
         self._setup_clients_and_checkers()
         # Load servers and IP addresses from configuration files.
         self._load_configuration()
+        self.logger.log_debug("Initialization complete. All components are ready.")
 
         # Create check handler with initialized clients.
         self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger, self.webhook_client)
@@ -140,6 +141,7 @@ class MainApplication:
             # Main event loop: continue running until shutdown is requested.
             while not self.signal_handler.is_shutdown_requested:
                 # Execute DNS RBL checks for all configured servers and IPs.
+                self.logger.log_debug("Starting DNS RBL check run.")
                 self._run_checks()
 
                 # Check if run-once mode is enabled (useful for testing).
