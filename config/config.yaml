@@ -1,7 +1,7 @@
 # Configuration for DNS RBL Checker.
 
 # General settings.
-run_once: true  # If true, the script will run once and then exit.
+run_once: false  # If true, the script will run once and then exit.
 sleep_hours: 3   # Hours to sleep between checks if run_once is false.
 
 # File paths.
