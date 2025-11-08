@@ -139,7 +139,7 @@ class MainApplication:
             return
 
         if not self.api_client:
-            self.logger.log_warn("API update is enabled but API client was not initialized")
+            self.logger.log_warning("API update is enabled but API client was not initialized")
             return
 
         self.logger.log_info("Attempting to update IP addresses from API")
@@ -150,7 +150,7 @@ class MainApplication:
             self.ips = [[ip] for ip in ips]
             self.logger.log_info(f"Successfully updated {len(ips)} IP address(es) from API")
         else:
-            self.logger.log_warn(f"Failed to update IPs from API: {error}. Using existing ips.txt configuration.")
+            self.logger.log_warning(f"Failed to update IPs from API: {error}. Using existing ips.txt configuration.")
 
     def _run_checks(self):
         """Run the DNS RBL checks against all servers and IPs."""

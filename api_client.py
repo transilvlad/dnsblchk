@@ -61,7 +61,7 @@ class ApiClient:
                 else:
                     error_msg = "Basic auth configured but username or password is missing"
                     if self.logger:
-                        self.logger.log_warn(error_msg)
+                        self.logger.log_warning(error_msg)
                     return False, None, error_msg
 
             elif self.auth_type == 'bearer':
@@ -72,7 +72,7 @@ class ApiClient:
                 else:
                     error_msg = "Bearer auth configured but token is missing"
                     if self.logger:
-                        self.logger.log_warn(error_msg)
+                        self.logger.log_warning(error_msg)
                     return False, None, error_msg
 
             # Make the request
@@ -94,7 +94,7 @@ class ApiClient:
             if not content:
                 error_msg = "API returned empty response"
                 if self.logger:
-                    self.logger.log_warn(error_msg)
+                    self.logger.log_warning(error_msg)
                 return False, None, error_msg
 
             # Split by lines and filter out empty lines
@@ -103,7 +103,7 @@ class ApiClient:
             if not ips:
                 error_msg = "No IP addresses found in API response"
                 if self.logger:
-                    self.logger.log_warn(error_msg)
+                    self.logger.log_warning(error_msg)
                 return False, None, error_msg
 
             if self.logger:
@@ -115,19 +115,19 @@ class ApiClient:
         except requests.exceptions.Timeout:
             error_msg = f"API request timeout ({self.timeout}s): {self.url}"
             if self.logger:
-                self.logger.log_warn(error_msg)
+                self.logger.log_warning(error_msg)
             return False, None, error_msg
 
         except requests.exceptions.ConnectionError as e:
             error_msg = f"API connection error: {self.url} - {str(e)}"
             if self.logger:
-                self.logger.log_warn(error_msg)
+                self.logger.log_warning(error_msg)
             return False, None, error_msg
 
         except requests.exceptions.HTTPError as e:
             error_msg = f"API HTTP error ({e.response.status_code}): {self.url} - {str(e)}"
             if self.logger:
-                self.logger.log_warn(error_msg)
+                self.logger.log_warning(error_msg)
             return False, None, error_msg
 
         except Exception as e:
