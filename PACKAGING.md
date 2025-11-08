@@ -109,9 +109,12 @@ ls /usr/lib/systemd/system/dnsblchk.service
 ```
 
 ---
-## Debian/Ubuntu Packaging (Manual)
+## Debian/Ubuntu Packaging
 
-Example native Debian packaging using `debhelper` + `pybuild`.
+Debian/Ubuntu packages are built using `debhelper` + `pybuild`. A helper script `build-deb.sh` automates the entire process, which handles:
+- Creating the Debian package metadata (`debian/` directory with control files)
+- Configuring permissions and system user/group setup via postinst hook
+- Running `dpkg-buildpackage` to produce the final `.deb` file
 
 ### Prerequisites
 
@@ -120,15 +123,38 @@ sudo apt update
 sudo apt install -y build-essential debhelper dh-python python3 python3-setuptools python3-pip fakeroot
 ```
 
-### 1. (Optional) Source Distribution
+### Quick Build: Using build-deb.sh
+
+From the project root directory, simply run:
+
+```bash
+bash build-deb.sh
+```
+
+The script will:
+1. Clean previous build artifacts
+2. Build the source distribution
+3. Create the `debian/` directory with all necessary control files (control, rules, install, changelog, postinst, postrm)
+4. Invoke `dpkg-buildpackage` to produce the `.deb` package
+
+The resulting `.deb` package will be located at `../dnsblchk_<version>-1_all.deb`.
+
+### Manual Build Process
+
+If you prefer to build step-by-step without the script:
+
+#### 1. Build Source Distribution
 ```bash
 python3 -m build --sdist
 ```
 
-### 2. Create the `debian/` Directory
-
+#### 2. Create the `debian/` Directory Structure
 ```bash
 mkdir debian
+```
+
+#### 3. Create debian/control
+```bash
 cat > debian/control <<'EOF'
 Source: dnsblchk
 Section: utils
@@ -144,76 +170,92 @@ Depends: ${python3:Depends}, ${misc:Depends}
 Description: DNS Blacklist Checker service
  Monitors IPs against DNSBLs and can email alerts.
 EOF
+```
 
+#### 4. Create debian/rules
+```bash
 cat > debian/rules <<'EOF'
 #!/usr/bin/make -f
 %:
 	dh $@ --with python3 --buildsystem=pybuild
 EOF
 chmod +x debian/rules
+```
 
-# NOTE: the repository layout changed — the runtime template lives at `config/config.yaml`.
-# Developer-local overrides should be placed in `config/config-local.yaml` and will be ignored by the packager.
-# Package the runtime config into `/opt/dnsblchk/config/` and let the installer create a symlink at `/etc/dnsblchk/config.yaml`.
+#### 5. Create debian/install
+This specifies what files get packaged where:
+```bash
 cat > debian/install <<'EOF'
 dnsblchk.service usr/lib/systemd/system/
 *.py opt/dnsblchk/
-# Package the runtime config (use config/config.yaml in repo)
 config/config.yaml opt/dnsblchk/config/
 config/ips.txt opt/dnsblchk/config/
 config/servers.txt opt/dnsblchk/config/
 EOF
+```
 
+#### 6. Create debian/changelog
+```bash
 VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
 cat > debian/changelog <<EOF
 dnsblchk (${VERSION}-1) unstable; urgency=medium
-  * Initial release.
+  * Automated release.
  -- DNSBL Checker <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
 EOF
 ```
 
-### 3. Build the DEB
+#### 7. Build the DEB
 ```bash
 dpkg-buildpackage -us -uc -b
 ```
-Resulting `.deb` appears one level above (`../dnsblchk_<version>-1_all.deb`).
 
-### 4. Install and Verify
+The resulting `.deb` appears one level above the project root: `../dnsblchk_<version>-1_all.deb`.
+
+### Package Behaviour on Installation
+
+The installer automatically performs several setup steps via the `debian/postinst` hook:
+
+- **System User/Group**: Creates `dnsblchk` system user and group if missing
+- **Application Directory**: Ensures `/opt/dnsblchk` exists and is owned by `dnsblchk:dnsblchk` (avoids systemd namespace failures)
+- **Config Symlinks**: Creates symlinks at:
+  - `/etc/dnsblchk/config.yaml` → `/opt/dnsblchk/config/config.yaml`
+  - `/etc/dnsblchk/ips.txt` → `/opt/dnsblchk/config/ips.txt`
+  - `/etc/dnsblchk/servers.txt` → `/opt/dnsblchk/config/servers.txt`
+  
+  If any of these already exist as directories on the system, they are backed up to a timestamped `.orig.<unix>` file and replaced with the symlink.
+
+- **Log Directory**: Creates `/var/log/dnsblchk` and sets ownership to `dnsblchk:dnsblchk`
+- **Runtime Directory**: Creates `/run/dnsblchk` and sets ownership to `dnsblchk:dnsblchk`
+- **Systemd Daemon Reload**: Runs `systemctl daemon-reload` to register the new service unit
+
+### Installation and Verification
+
 ```bash
-sudo apt install ./../dnsblchk_*_all.deb
-systemctl status dnsblchk.service
+sudo apt install ./dnsblchk_<version>-1_all.deb
+```
+
+After installation, you can verify and enable autorun:
+
+```bash
+# Check service status
+sudo systemctl status dnsblchk.service
+
+# Enable service to autorun on boot
+sudo systemctl enable dnsblchk.service
+
+# Start the service manually (if not auto-started)
+sudo systemctl start dnsblchk.service
+
+# View installed configuration
 ls /etc/dnsblchk/
+cat /etc/dnsblchk/config.yaml
 ```
 
-# Behaviour of the installer / package (important)
-- The packaging now places the runtime template at `/opt/dnsblchk/config/config.yaml`.
-- The generated `debian/postinst` (and the `build-deb.sh` helper) will:
-  - create the `dnsblchk` system user/group if missing,
-  - ensure `/opt/dnsblchk` exist and is owned by `dnsblchk:dnsblchk` (this avoids systemd NAMESPACE failures when ReadWritePaths or mount namespacing is used),
-  - create `/var/log/dnsblchk` and set ownership,
-  - create `/etc/dnsblchk` and create symlinks from `/etc/dnsblchk/config.yaml`, `/etc/dnsblchk/ips.txt` and `/etc/dnsblchk/servers.txt` to the packaged files under `/opt/dnsblchk/config/`.
-- If an administrator previously created a directory at `/etc/dnsblchk/config.yaml` (or the other files) the postinst will move it aside with a timestamped `.orig.<unix>` suffix and then create the correct symlink.
-
----
-## Debian/Ubuntu Packaging (Using build-deb.sh)
-
-A helper script `build-deb.sh` is provided to automate the creation of the `.deb` package. It performs the same steps as the manual process but in a single command.
-
-### Prerequisites
-Ensure you have the required tools installed:
+To verify that the service is configured for autorun:
 ```bash
-sudo apt update
-sudo apt install -y build-essential debhelper dh-python python3 python3-setuptools python3-pip fakeroot
+sudo systemctl is-enabled dnsblchk.service
 ```
-
-### Build the DEB
-From the project root directory, simply run the script:
-```bash
-bash build-deb.sh
-```
-The script will create a temporary `debian/` directory, prepare the necessary control files, and invoke `dpkg-buildpackage`.
-
-The resulting `.deb` package will be located in the parent directory (e.g., `../dnsblchk_<version>-1_all.deb`).
+Should output: `enabled`
 
 ---
 ## Troubleshooting and Debugging
