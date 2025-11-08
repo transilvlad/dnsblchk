@@ -22,7 +22,7 @@ cat > debian/control <<'EOF'
 Source: dnsblchk
 Section: utils
 Priority: optional
-Maintainer: <transilvlad@gmail.com>
+Maintainer: Vlad Marian <transilvlad@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3, python3-setuptools, dh-python
 Standards-Version: 4.6.0
 Homepage: https://github.com/example/dnsblchk
@@ -58,7 +58,7 @@ cat > debian/changelog <<EOF
 dnsblchk (${VERSION}-1) unstable; urgency=medium
   * Automated release.
   * Ensure config/config.yaml packaged where application expects it.
- -- <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
+ -- Vlad Marian <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
 EOF
 
 # Create debian/postinst to add user/group, set permissions, and create config symlink if needed

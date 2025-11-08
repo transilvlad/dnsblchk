@@ -159,7 +159,7 @@ cat > debian/control <<'EOF'
 Source: dnsblchk
 Section: utils
 Priority: optional
-Maintainer: <transilvlad@gmail.com>
+Maintainer: Vlad Marian <transilvlad@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3, python3-setuptools, dh-python
 Standards-Version: 4.6.0
 Homepage: https://github.com/example/dnsblchk
@@ -200,7 +200,7 @@ VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","
 cat > debian/changelog <<EOF
 dnsblchk (${VERSION}-1) unstable; urgency=medium
   * Automated release.
- -- <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
+ -- Vlad Marian <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
 EOF
 ```
 
@@ -304,7 +304,7 @@ fpm -s python -t deb dist/dnsblchk-*.tar.gz \
     --name dnsblchk \
     --depends python3 \
     --description "DNS RBL Checker service" \
-    --maintainer "<transilvlad@gmail.com>"
+    --maintainer "Vlad Marian <transilvlad@gmail.com>"
 ```
 Produces a `dnsblchk_<version>_all.deb`.
 
