@@ -1,6 +1,6 @@
-# DNS Block List Checker (DNSblChk)
+# DNS RBL Checker
 
-DNSblChk is an open-source Python script and service for monitoring and reporting on DNS blacklists.
+An open-source Python script and service for monitoring and reporting on DNS RBLs.
 It is designed for ease of use, with a straightforward configuration and clear reporting.
 
 ## Features
@@ -39,18 +39,18 @@ All configuration is done in the `config.yaml` file. Here are the available opti
 -   `sleep_hours`: The number of hours to wait between checks. (Default: `3`)
 
 ### File Paths
--   `servers_file`: Path to the CSV file containing DNSBL servers.
+-   `servers_file`: Path to the CSV file containing RBL servers.
 -   `ips_file`: Path to the CSV file containing IPs to check.
--   `report_dir`: Directory to store CSV report files from DNSBL checks.
+-   `report_dir`: Directory to store CSV report files from RBL checks.
 
 ### DNS Nameservers
--   `nameservers`: A list of DNS nameservers to use for DNSBL queries.
+-   `nameservers`: A list of DNS nameservers to use for RBL queries.
     - Supports multiple servers for redundancy and load balancing.
     - Example: `['208.67.222.222', '208.67.220.220']` (OpenDNS servers)
     - If not specified, defaults to `['208.67.222.222']`
 
 ### Threading Settings
--   `threading.enabled`: If `true`, multithreading is enabled for DNSBL checks. (Default: `true`)
+-   `threading.enabled`: If `true`, multithreading is enabled for RBL checks. (Default: `true`)
 -   `threading.thread_count`: The number of worker threads to use for concurrent checks. (Default: `4`, Minimum: `1`)
     - Increase this value for faster checks but higher resource usage.
     - Decrease for lower resource usage but slower checks.
@@ -79,7 +79,7 @@ to store `smtp_password` instead of committing plain text to version control.
 Webhooks use Slack-compatible JSON payload format and can be used with Slack, Discord, or any custom HTTP endpoint:
 ```json
 {
-  "text": "DNS Blacklist Alert\n==================================================\n\nBlacklisted IPs: 1\n\n192.168.1.1 ===> server1, server2\n"
+  "text": "DNS RBL Alert\n--------------------\n\nListed IPs: 1\n\n192.168.1.1 ===> server1, server2\n",
 }
 ```
 
@@ -99,7 +99,7 @@ To run the service, simply execute the `main.py` script:
 python main.py
 ```
 
-The service will start checking the IPs listed in `config/ips.txt` against the DNSBL servers in `config/servers.txt`.
+The service will start checking the IPs listed in `config/ips.txt` against the RBL servers in `config/servers.txt`.
 Any findings will be logged and to a CSV file and if configured, email alerts will be sent.
 
 ## Docker Usage

@@ -160,7 +160,7 @@ class Config:
     def get_email_recipients(self) -> list:
         """
         Returns the list of email recipients.
-        Recipients will receive alerts when IP addresses are found on blacklists.
+        Recipients will receive alerts when IP addresses are found on RBLs.
 
         Returns:
             list: List of email recipient addresses (default: empty list).
@@ -231,7 +231,7 @@ class Config:
 
     def get_nameservers(self) -> list:
         """
-        Returns the list of DNS nameservers to use for DNSBL queries.
+        Returns the list of DNS nameservers to use for DNS RBL queries.
         Supports multiple nameservers for redundancy and load balancing.
 
         Returns:
@@ -244,7 +244,7 @@ class Config:
 
     def get_thread_count(self) -> int:
         """
-        Returns the number of threads to use for concurrent DNSBL checks.
+        Returns the number of threads to use for concurrent DNS RBL checks.
         More threads can improve performance but consume more resources.
 
         Returns:
@@ -286,7 +286,7 @@ class Config:
     def get_webhook_urls(self) -> list:
         """
         Returns the list of webhook URLs to notify.
-        Webhooks will receive alerts when IP addresses are found on blacklists.
+        Webhooks will receive alerts when IP addresses are found on RBLs.
 
         Returns:
             list: List of webhook URLs (default: empty list).

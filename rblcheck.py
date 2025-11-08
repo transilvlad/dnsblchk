@@ -5,18 +5,18 @@ import dns.reversename
 
 
 class RBLCheck:
-    """Checks if IP addresses are blacklisted on DNSBL servers."""
+    """Checks if IP addresses are listed on DNS RBL servers."""
 
     def __init__(self, nameservers: list = None):
         """
-        Initialize the DNSRBL checker.
+        Initialize the DNS RBL Checker.
 
         Args:
             nameservers: List of DNS nameservers to use for queries.
                         Defaults to OpenDNS servers if not provided.
                         Example: ['208.67.222.222', '208.67.220.220']
         """
-        # List of DNS nameservers to query for blacklist checks.
+        # List of DNS nameservers to query for RBL checks.
         # Uses OpenDNS servers by default for redundancy.
         if nameservers is None:
             nameservers = ['208.67.222.222', '208.67.220.220']
@@ -24,12 +24,12 @@ class RBLCheck:
 
     def check(self, ip: str, server: str) -> Union[bool, List[str]]:
         """
-        Checks if an IP address is blacklisted on a DNSBL server.
-        Uses reverse DNS lookup to query the blacklist server.
+        Checks if an IP address is listed on a DNS RBL server.
+        Uses reverse DNS lookup to query the RBL server.
 
         Args:
             ip: The IP address to check.
-            server: The DNSBL server to query.
+            server: The DNS RBL server to query.
 
         Returns:
             A list with server, response address and 'R' if listed, otherwise False.
@@ -45,7 +45,7 @@ class RBLCheck:
                 # Convert IPv6 address to reverse DNS notation.
                 rev_ip = dns.reversename.from_address(ip).to_text(omit_final_dot=True)
 
-            # Construct the query name for the DNSBL server.
+            # Construct the query name for the DNS RBL server.
             query_name = f"{rev_ip}.{server}"
 
             # Create resolver instance for DNS queries.
@@ -54,12 +54,12 @@ class RBLCheck:
             # Set the nameservers to use for this query (supports multiple servers).
             resolver.nameservers = self.nameservers
 
-            # Query the DNSBL server for an A record (contains return code).
+            # Query the DNS RBL server for an A record (contains return code).
             answers = resolver.resolve(query_name, 'A')
 
             # IP is listed, prepare the result list.
             result = [server]
-            # Extract response address from DNSBL return value.
+            # Extract response address from DNS RBL return value.
             for rdata in answers:
                 result.append(rdata.address)
             # Append 'R' to indicate result (listing flag).

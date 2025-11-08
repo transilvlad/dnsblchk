@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dnsblchk"
 version = "1.0.1"
-description = "A DNS Blacklist Checker service."
+description = "A DNS RBL Checker service."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [ { name = "DNSBL Checker", email = "transilvlad@gmail.com" } ]
+authors = [ { name = "DNS RBL Checker", email = "transilvlad@gmail.com" } ]
 requires-python = ">=3.9"
 urls = { homepage = "https://github.com/example/dnsblchk" }
-keywords = ["dns", "blacklist", "monitoring", "email", "rbl"]
+keywords = ["dns", "black list", "monitoring", "email", "rbl"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",

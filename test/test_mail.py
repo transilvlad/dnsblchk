@@ -268,4 +268,4 @@ class TestMailClient:
         mock_conn.starttls.assert_not_called()
         mock_smtp_ssl.assert_called_once_with('localhost', 465)
 
-"""Test suite for DNSBL Checker application."""
+"""Test suite for DNS RBL Checker application."""

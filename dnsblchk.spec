@@ -3,7 +3,7 @@
 Name:           %{src_name}
 Version:        @VERSION@
 Release:        1%{?dist}
-Summary:        A DNS Blacklist Checker service
+Summary:        A DNS RBL Checker service
 License:        MIT
 URL:            https://github.com/transilvlad/dnsblchk
 Source0:        %{src_name}-%{version}.tar.gz
@@ -20,7 +20,7 @@ Requires(preun):  systemd
 Requires(postun): systemd
 
 %description
-A service to monitor IP addresses against DNS blacklists (DNSBLs) and send email alerts.
+Monitor IP addresses against DNS RBLs and alert by email or web hook.
 
 %prep
 %setup -q -n %{src_name}-%{version}

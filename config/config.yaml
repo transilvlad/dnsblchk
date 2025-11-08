@@ -1,4 +1,4 @@
-# Configuration for DNS Block List Checker.
+# Configuration for DNS RBL Checker.
 
 # General settings.
 run_once: true  # If true, the script will run once and then exit.
@@ -9,14 +9,14 @@ servers_file: "/etc/dnsblchk/servers.txt" # File containing the list of RBL serv
 ips_file: "/etc/dnsblchk/ips.txt"         # File containing the list of IP addresses to check.
 report_dir: "/var/log/dnsblchk/"          # Directory for storing report files.
 
-# DNS Nameservers for DNSBL queries.
+# DNS Nameservers for DNS RBL queries.
 nameservers:
   - "208.67.222.222"  # OpenDNS nameserver.
   - "208.67.220.220"  # OpenDNS nameserver (secondary).
 
 # Threading settings.
 threading:
-  enabled: true    # Enable multithreading for DNSBL checks (default: true).
+  enabled: true    # Enable multithreading for DNS RBL checks (default: true).
   thread_count: 10 # Number of worker threads (default: 10, minimum: 1).
 
 # Email alerting.

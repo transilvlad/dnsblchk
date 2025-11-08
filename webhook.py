@@ -43,20 +43,20 @@ class WebhookClient:
         Returns:
             Formatted text with IP information.
         """
-        text = "DNS Blacklist Alert\n"
-        text += "=" * 50 + "\n\n"
+        text = "DNS RBL Alert\n"
+        text += "-" * 20 + "\n\n"
 
         if data:
             ips = data.get("ips", {})
             count = data.get("count", 0)
 
-            text += f"Blacklisted IPs: {count}\n\n"
+            text += f"Listed IPs: {count}\n\n"
 
             if ips:
                 for ip, servers in ips.items():
                     text += f"{ip} ===> {', '.join(servers)}\n"
             else:
-                text += "No blacklisted IPs found.\n"
+                text += "No listed IPs found.\n"
         else:
             text += "No alert data available.\n"
 

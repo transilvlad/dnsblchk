@@ -14,25 +14,25 @@ from webhook import WebhookClient
 
 class DNSCheck:
     """
-    Handles DNSBL checking with support for multithreading.
+    Handles DNS RBL checking with support for multithreading.
     Manages check coordination, result reporting, and email notifications.
     """
 
     def __init__(self, mail_client: MailClient, dnsrbl_checker: RBLCheck, logger: Logger, webhook_client: WebhookClient = None):
         """
-        Initialize the DNSBL Check Handler.
+        Initialize the DNS RBL Check Handler.
 
         Args:
             mail_client: MailClient instance for sending alerts.
-            dnsrbl_checker: DNSRBLChecker instance for checking IPs.
+            dnsrbl_checker: DNS RBL Checker instance for checking IPs.
             logger: Logger instance for logging.
             webhook_client: WebhookClient instance for sending webhook notifications (optional).
         """
-        # Mail client for sending email alerts on blacklisted IPs.
+        # Mail client for sending email alerts on listed IPs.
         self.mail_client = mail_client
         # Webhook client for posting notifications to external services.
         self.webhook_client = webhook_client
-        # DNSRBL checker instance for performing blacklist queries.
+        # DNS RBL Checker instance for performing RBL queries.
         self.dnsrbl_checker = dnsrbl_checker
         # Logger instance for recording check results and errors.
         self.logger = logger
@@ -47,12 +47,12 @@ class DNSCheck:
 
     def check_ip_against_server(self, ip: str, server: str) -> tuple:
         """
-        Check a single IP against a single DNSBL server.
+        Check a single IP against a single DNS RBL server.
         This method is executed by worker threads in the thread pool.
 
         Args:
             ip: The IP address to check.
-            server: The DNSBL server to check against.
+            server: The DNS RBL server to check against.
 
         Returns:
             tuple: (ip, server, is_listed, result_details) or None if shutdown requested.
@@ -62,7 +62,7 @@ class DNSCheck:
             return None
 
         try:
-            # Query DNSRBL server for the IP address.
+            # Query DNS RBL server for the IP address.
             is_listed = self.dnsrbl_checker.check(ip, server)
             # Extract result details from response (if listed).
             return (ip, server, is_listed, is_listed[1] if is_listed else None)
@@ -78,7 +78,7 @@ class DNSCheck:
 
         Args:
             ip: The IP address.
-            server: The DNSBL server.
+            server: The DNS RBL server.
             result_details: Details about the listing.
         """
         # Use lock to ensure thread-safe file operations.
@@ -108,7 +108,7 @@ class DNSCheck:
 
         Args:
             ip: The IP address.
-            server: The DNSBL server.
+            server: The DNS RBL server.
         """
         # Use lock to ensure thread-safe dictionary updates.
         with self.lock:
@@ -148,11 +148,11 @@ class DNSCheck:
 
     def run(self, servers: list, ips: list):
         """
-        Run the DNSBL check with multithreading support.
+        Run the DNS RBL check with multithreading support.
         Coordinates checking of all IPs against all servers.
 
         Args:
-            servers: List of DNSBL servers (each server is a list/tuple).
+            servers: List of DNS RBL servers (each server is a list/tuple).
             ips: List of IPs to check (each IP is a list/tuple).
         """
         # Return early if shutdown has been requested.
@@ -166,7 +166,7 @@ class DNSCheck:
             self.csv_writer = None
 
             # Log start of check run.
-            self.logger.log_info(f"Checking {len(ips)} IP addresses against {len(servers)} DNSBL servers.")
+            self.logger.log_info(f"Checking {len(ips)} IP addresses against {len(servers)} DNS RBL servers.")
             self.logger.log_info(f"Using {config.get_thread_count()} threads.")
 
             # Prepare all check tasks as (ip, server) tuples.
@@ -218,7 +218,7 @@ class DNSCheck:
             # Log summary of check run.
             self.logger.log_info(f"Found {len(self.listed_ips)} listed IP addresses.")
 
-            # Send notifications if IPs were found
+            # Send notifications if IPs were found.
             if self.listed_ips:
                 self.logger.log_debug(f"Listed IPs detected: {list(self.listed_ips.keys())}")
 
@@ -258,7 +258,7 @@ class DNSCheck:
         self.logger.log_debug(f"Preparing to send email report for {len(self.listed_ips)} listed IP(s)")
 
         # Build email message with header.
-        mail_text = "The following IP addresses were found on one or more DNS blacklists:\n\n"
+        mail_text = "The following IP addresses were found on one or more DNS RBLs:\n\n"
         # Add each listed IP with servers it appears on.
         for ip, servers in self.listed_ips.items():
             mail_text += f"{ip} ===> {', '.join(servers)}\n"
@@ -273,7 +273,7 @@ class DNSCheck:
             success, error = self.mail_client.send_plain(
                 to_email=recipient,
                 from_email=config.get_email_sender(),
-                subject="DNS Block List Alert",
+                subject="DNS RBL Alert",
                 message=mail_text
             )
             # Log any email sending errors.

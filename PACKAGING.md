@@ -159,7 +159,7 @@ cat > debian/control <<'EOF'
 Source: dnsblchk
 Section: utils
 Priority: optional
-Maintainer: DNSBL Checker <transilvlad@gmail.com>
+Maintainer: <transilvlad@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3, python3-setuptools, dh-python
 Standards-Version: 4.6.0
 Homepage: https://github.com/example/dnsblchk
@@ -167,8 +167,8 @@ Homepage: https://github.com/example/dnsblchk
 Package: dnsblchk
 Architecture: all
 Depends: ${python3:Depends}, ${misc:Depends}
-Description: DNS Blacklist Checker service
- Monitors IPs against DNSBLs and can email alerts.
+Description: DNS RBL Checker service
+ Monitor IP addresses against DNS RBLs and alert by email or web hook.
 EOF
 ```
 
@@ -200,7 +200,7 @@ VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","
 cat > debian/changelog <<EOF
 dnsblchk (${VERSION}-1) unstable; urgency=medium
   * Automated release.
- -- DNSBL Checker <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
+ -- <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
 EOF
 ```
 
@@ -303,8 +303,8 @@ python3 -m build --sdist
 fpm -s python -t deb dist/dnsblchk-*.tar.gz \
     --name dnsblchk \
     --depends python3 \
-    --description "DNS Blacklist Checker service" \
-    --maintainer "DNSBL Checker <transilvlad@gmail.com>"
+    --description "DNS RBL Checker service" \
+    --maintainer "<transilvlad@gmail.com>"
 ```
 Produces a `dnsblchk_<version>_all.deb`.
 

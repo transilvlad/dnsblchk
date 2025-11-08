@@ -13,7 +13,7 @@ from webhook import WebhookClient
 
 class MainApplication:
     """
-    Main application class for the DNSBL checker service.
+    Main application class for the DNS RBL checker service.
     Orchestrates initialization, configuration loading, and the main check loop.
     """
 
@@ -27,11 +27,11 @@ class MainApplication:
         self.mail_client = None
         # Webhook client for posting notifications to external services.
         self.webhook_client = None
-        # DNSRBL checker instance for querying blacklists.
+        # DNS RBL Checker instance for querying RBLs.
         self.dnsrbl_checker = None
-        # Check handler that orchestrates DNSBL checks.
+        # Check handler that orchestrates DNS RBL checks.
         self.check_handler = None
-        # List of DNSBL servers loaded from configuration.
+        # List of DNS RBL servers loaded from configuration.
         self.servers = None
         # List of IP addresses loaded from configuration.
         self.ips = None
@@ -58,7 +58,7 @@ class MainApplication:
         self.logger.log_debug("Signal handlers setup complete (SIGINT and SIGTERM)")
 
     def _setup_clients_and_checkers(self):
-        """Initialize mail client and DNSRBL checker."""
+        """Initialize mail client and DNS RBL Checker."""
         self.logger.log_debug(f"Setting up mail client: smtp_host={config.get_smtp_host()}, smtp_port={config.get_smtp_port()}, use_tls={config.get_smtp_use_tls()}, use_ssl={config.get_smtp_use_ssl()}")
         # Create mail client for sending email notifications with auth and encryption settings.
         self.mail_client = MailClient(
@@ -80,19 +80,19 @@ class MainApplication:
         )
         self.logger.log_debug("Webhook client initialized successfully")
 
-        self.logger.log_debug(f"Setting up DNSRBL checker with nameservers: {config.get_nameservers()}")
-        # Create DNSRBL checker instance with nameservers from config.
+        self.logger.log_debug(f"Setting up DNS RBL Checker with nameservers: {config.get_nameservers()}")
+        # Create DNS RBL Checker instance with nameservers from config.
         self.dnsrbl_checker = RBLCheck(config.get_nameservers())
-        self.logger.log_debug("DNSRBL checker initialized successfully")
+        self.logger.log_debug("DNS RBL Checker initialized successfully")
 
     def _load_configuration(self):
         """Load servers and IPs from configuration files."""
-        # Load DNSBL servers from CSV file.
+        # Load DNS RBL servers from CSV file.
         self.servers = FileHandler.load_csv(config.servers_file)
         # Load IP addresses to check from CSV file.
         self.ips = FileHandler.load_csv(config.ips_file)
         # Log summary of loaded configuration.
-        self.logger.log_info(f"Loaded {len(self.servers)} DNSBL servers and {len(self.ips)} IP addresses.")
+        self.logger.log_info(f"Loaded {len(self.servers)} DNS RBL servers and {len(self.ips)} IP addresses.")
 
     def _initialize(self):
         """Initialize all application components in proper order."""
@@ -111,7 +111,7 @@ class MainApplication:
         self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger, self.webhook_client)
 
     def _run_checks(self):
-        """Run the DNSBL checks against all servers and IPs."""
+        """Run the DNS RBL checks against all servers and IPs."""
         # Delegate to check handler to perform the actual checks.
         self.check_handler.run(self.servers, self.ips)
 
@@ -139,7 +139,7 @@ class MainApplication:
         try:
             # Main event loop: continue running until shutdown is requested.
             while not self.signal_handler.is_shutdown_requested:
-                # Execute DNSBL checks for all configured servers and IPs.
+                # Execute DNS RBL checks for all configured servers and IPs.
                 self._run_checks()
 
                 # Check if run-once mode is enabled (useful for testing).
@@ -160,7 +160,7 @@ class MainApplication:
 
 def main():
     """
-    Main entry point for the DNSBL checker service.
+    Main entry point for the DNS RBL checker service.
     """
     # If a config path is provided as the first CLI argument, load it.
     # Example: python3 main.py config/config-local.yaml

@@ -1,5 +1,5 @@
 #!/bin/bash
-# DNS Block List Checker - Service Control Script
+# DNS RBL Checker - Service Control Script
 # Updated for Ubuntu 22.04+ with systemd support
 #
 # Usage: ./main.sh {start|stop|restart|status|enable|disable}
@@ -230,7 +230,7 @@ enable_systemd() {
 
     cat > "${systemd_file}" << 'EOF'
 [Unit]
-Description=DNS Block List Checker
+Description=DNS RBL Checker
 After=network.target syslog.target
 
 [Service]
