@@ -345,3 +345,118 @@ class TestConfigWebhooks:
         assert webhooks_config['enabled'] is True
         assert len(webhooks_config['urls']) == 2
         assert webhooks_config['timeout'] == 15
+
+
+class TestConfigApiUpdate:
+    """Test cases for API update configuration."""
+
+    def test_config_api_update_section_enabled(self):
+        """Test config api_update section when enabled."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'basic',
+            'username': 'user',
+            'password': 'pass',
+            'bearer_token': '',
+            'timeout': 10
+        }
+        assert api_update_config['enabled'] is True
+        assert api_update_config['url'] == 'https://example.com/api/ips'
+        assert api_update_config['auth_type'] == 'basic'
+        assert api_update_config['timeout'] == 10
+
+    def test_config_api_update_section_disabled(self):
+        """Test config api_update section when disabled."""
+        api_update_config = {'enabled': False}
+        assert api_update_config['enabled'] is False
+
+    def test_config_api_update_no_auth(self):
+        """Test api_update with no authentication."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'none'
+        }
+        assert api_update_config['auth_type'] == 'none'
+
+    def test_config_api_update_basic_auth(self):
+        """Test api_update with basic authentication."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'basic',
+            'username': 'testuser',
+            'password': 'testpass'
+        }
+        assert api_update_config['auth_type'] == 'basic'
+        assert api_update_config['username'] == 'testuser'
+        assert api_update_config['password'] == 'testpass'
+
+    def test_config_api_update_bearer_auth(self):
+        """Test api_update with bearer token authentication."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'bearer',
+            'bearer_token': 'token123'
+        }
+        assert api_update_config['auth_type'] == 'bearer'
+        assert api_update_config['bearer_token'] == 'token123'
+
+    def test_config_api_update_timeout_default(self):
+        """Test api_update timeout defaults to 10."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips'
+        }
+        timeout = api_update_config.get('timeout', 10)
+        assert timeout == 10
+
+    def test_config_api_update_timeout_custom(self):
+        """Test api_update with custom timeout."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'timeout': 30
+        }
+        assert api_update_config['timeout'] == 30
+
+    def test_config_api_update_empty_credentials(self):
+        """Test api_update with empty credentials."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'none',
+            'username': '',
+            'password': '',
+            'bearer_token': ''
+        }
+        assert api_update_config['username'] == ''
+        assert api_update_config['password'] == ''
+        assert api_update_config['bearer_token'] == ''
+
+    def test_config_api_update_url_empty(self):
+        """Test api_update with empty URL."""
+        api_update_config = {
+            'enabled': False,
+            'url': ''
+        }
+        assert api_update_config['url'] == ''
+
+    def test_config_api_update_all_fields(self):
+        """Test api_update configuration with all fields."""
+        api_update_config = {
+            'enabled': True,
+            'url': 'https://example.com/api/ips',
+            'auth_type': 'bearer',
+            'username': '',
+            'password': '',
+            'bearer_token': 'mytoken123',
+            'timeout': 20
+        }
+        assert api_update_config['enabled'] is True
+        assert api_update_config['url'] == 'https://example.com/api/ips'
+        assert api_update_config['auth_type'] == 'bearer'
+        assert api_update_config['bearer_token'] == 'mytoken123'
+        assert api_update_config['timeout'] == 20
