@@ -8,6 +8,7 @@ It is designed for ease of use, with a straightforward configuration and clear r
 -   **Easy Configuration**: All settings are managed in a single `config/config.yaml` file.
 -   **CSV Reports**: Records all findings in CSV files for easy analysis.
 -   **Email Alerts**: Sends detailed email notifications when listed IP addresses are found.
+-   **Webhook Notifications**: Posts alerts to external services (Slack, Discord, custom APIs) for integration flexibility.
 -   **Flexible Operation**: Can be run as a continuous monitoring service or as a one-time check.
 -   **Advanced Logging**: Configurable logging levels (DEBUG, INFO, WARN, ERROR) with console and file output control.
 
@@ -67,6 +68,22 @@ All configuration is done in the `config.yaml` file. Here are the available opti
 
 Security tip: Prefer environment-specific secrets management (e.g., Ansible Vault, Kubernetes secrets)
 to store `smtp_password` instead of committing plain text to version control.
+
+### Webhook Alerting
+-   `webhooks.enabled`: If `true`, webhook notifications will be sent when IPs are listed. (Default: `false`)
+-   `webhooks.urls`: A list of webhook URLs to post notifications to. Supports multiple URLs for redundancy.
+    - Example: `['https://hooks.slack.com/services/YOUR/WEBHOOK', 'https://your-api.example.com/alerts']`
+    - Default: `[]` (empty list)
+-   `webhooks.timeout`: Timeout in seconds for webhook HTTP requests. (Default: `10`)
+
+Webhooks use Slack-compatible JSON payload format and can be used with Slack, Discord, or any custom HTTP endpoint:
+```json
+{
+  "text": "DNS Blacklist Alert\n==================================================\n\nBlacklisted IPs: 1\n\n192.168.1.1 ===> server1, server2\n"
+}
+```
+
+Examples: Slack (`https://hooks.slack.com/services/...`), Discord (`https://discordapp.com/api/webhooks/...`), or any custom HTTP endpoint.
 
 ### Logging Settings
 -   `logging.level`: Logging level for the application. Can be `DEBUG`, `INFO`, `WARN`, or `ERROR`. (Default: `INFO`)

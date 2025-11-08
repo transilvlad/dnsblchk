@@ -21,7 +21,6 @@ ExecStart=/usr/bin/python3 /opt/dnsblchk/main.py
 # Restart policy
 Restart=on-failure
 RestartSec=10
-MaxStartStopSec=60
 
 # Process management
 KillMode=process
@@ -33,7 +32,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/dnsblchk /var/run/dnsblchk /opt/dnsblchk/logs
+ReadWritePaths=/var/log/dnsblchk /var/run/dnsblchk
 
 # Logging
 StandardOutput=journal
@@ -56,4 +55,3 @@ LimitNPROC=4096
 [Install]
 # Target to include this service in
 WantedBy=multi-user.target
-

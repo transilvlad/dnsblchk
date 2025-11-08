@@ -133,7 +133,7 @@ cat > debian/control <<'EOF'
 Source: dnsblchk
 Section: utils
 Priority: optional
-Maintainer: DNSBL Checker <contact@example.com>
+Maintainer: DNSBL Checker <transilvlad@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3, python3-setuptools, dh-python
 Standards-Version: 4.6.0
 Homepage: https://github.com/example/dnsblchk
@@ -152,16 +152,23 @@ cat > debian/rules <<'EOF'
 EOF
 chmod +x debian/rules
 
+# NOTE: the repository layout changed — the runtime template lives at `config/config.yaml`.
+# Developer-local overrides should be placed in `config/config-local.yaml` and will be ignored by the packager.
+# Package the runtime config into `/opt/dnsblchk/config/` and let the installer create a symlink at `/etc/dnsblchk/config.yaml`.
 cat > debian/install <<'EOF'
 dnsblchk.service usr/lib/systemd/system/
-config/config.yaml.template etc/dnsblchk/config.yaml
+*.py opt/dnsblchk/
+# Package the runtime config (use config/config.yaml in repo)
+config/config.yaml opt/dnsblchk/config/
+config/ips.txt opt/dnsblchk/config/
+config/servers.txt opt/dnsblchk/config/
 EOF
 
 VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
 cat > debian/changelog <<EOF
 dnsblchk (${VERSION}-1) unstable; urgency=medium
   * Initial release.
- -- DNSBL Checker <contact@example.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
+ -- DNSBL Checker <transilvlad@gmail.com>  $(date -u '+%a, %d %b %Y %H:%M:%S +0000')
 EOF
 ```
 
@@ -178,9 +185,71 @@ systemctl status dnsblchk.service
 ls /etc/dnsblchk/
 ```
 
-### Notes
-- `python3-all` is omitted to speed builds (single interpreter sufficient).
-- For formal distribution, add copyright/licensing metadata (`debian/copyright`), `debian/source/format`, and optionally a `debian/watch` file.
+# Behaviour of the installer / package (important)
+- The packaging now places the runtime template at `/opt/dnsblchk/config/config.yaml`.
+- The generated `debian/postinst` (and the `build-deb.sh` helper) will:
+  - create the `dnsblchk` system user/group if missing,
+  - ensure `/opt/dnsblchk` exist and is owned by `dnsblchk:dnsblchk` (this avoids systemd NAMESPACE failures when ReadWritePaths or mount namespacing is used),
+  - create `/var/log/dnsblchk` and set ownership,
+  - create `/etc/dnsblchk` and create symlinks from `/etc/dnsblchk/config.yaml`, `/etc/dnsblchk/ips.txt` and `/etc/dnsblchk/servers.txt` to the packaged files under `/opt/dnsblchk/config/`.
+- If an administrator previously created a directory at `/etc/dnsblchk/config.yaml` (or the other files) the postinst will move it aside with a timestamped `.orig.<unix>` suffix and then create the correct symlink.
+
+---
+## Debian/Ubuntu Packaging (Using build-deb.sh)
+
+A helper script `build-deb.sh` is provided to automate the creation of the `.deb` package. It performs the same steps as the manual process but in a single command.
+
+### Prerequisites
+Ensure you have the required tools installed:
+```bash
+sudo apt update
+sudo apt install -y build-essential debhelper dh-python python3 python3-setuptools python3-pip fakeroot
+```
+
+### Build the DEB
+From the project root directory, simply run the script:
+```bash
+bash build-deb.sh
+```
+The script will create a temporary `debian/` directory, prepare the necessary control files, and invoke `dpkg-buildpackage`.
+
+The resulting `.deb` package will be located in the parent directory (e.g., `../dnsblchk_<version>-1_all.deb`).
+
+---
+## Troubleshooting and Debugging
+
+If the `dnsblchk` service fails to start after installation, use these commands to diagnose the issue.
+
+### 1. Check Service Status
+This command provides a snapshot of the service's state and shows recent log entries, which often include the error that caused the failure.
+```bash
+sudo systemctl status dnsblchk.service
+```
+Look for the `Active:` line. If it says `failed`, review the log output at the bottom of the command's response.
+
+### 2. View Detailed Service Logs
+To get the complete log history from the `systemd` journal, use `journalctl`:
+```bash
+sudo journalctl -u dnsblchk.service
+```
+To follow the logs in real-time while you attempt to start the service, use the `-f` (follow) flag:
+```bash
+sudo journalctl -u dnsblchk.service -f
+```
+
+### 3. Check Application Log File
+If the service starts but encounters issues later, it will write logs to its dedicated log file. The log directory is created at `/var/log/dnsblchk/` by the installer.
+```bash
+# Check for the log file
+ls -l /var/log/dnsblchk/
+
+# View the entire log
+cat /var/log/dnsblchk/dnsblchk.log
+
+# Follow the log in real-time
+tail -f /var/log/dnsblchk/dnsblchk.log
+```
+Common startup problems are often related to misconfigured paths or permissions issues. The logs from `journalctl` are usually the best place to start debugging.
 
 ---
 ## Alternative Quick Build Using `fpm`
@@ -193,7 +262,7 @@ fpm -s python -t deb dist/dnsblchk-*.tar.gz \
     --name dnsblchk \
     --depends python3 \
     --description "DNS Blacklist Checker service" \
-    --maintainer "DNSBL Checker <contact@example.com>"
+    --maintainer "DNSBL Checker <transilvlad@gmail.com>"
 ```
 Produces a `dnsblchk_<version>_all.deb`.
 
