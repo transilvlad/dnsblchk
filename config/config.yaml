@@ -41,6 +41,17 @@ webhooks:
   urls: []
   timeout: 10    # Timeout in seconds for webhook requests (default: 10).
 
+# API-based IP update.
+api_update:
+  enabled: false # If true, IP addresses will be fetched from an API before each check run.
+  url: ""        # API endpoint URL that returns text/plain with one IP per line.
+  # Authentication settings.
+  auth_type: "none"    # Authentication type: 'none', 'basic', or 'bearer' (default: 'none').
+  username: ""         # Username for basic authentication (required if auth_type is 'basic').
+  password: ""         # Password for basic authentication (required if auth_type is 'basic').
+  bearer_token: ""     # Bearer token for bearer authentication (required if auth_type is 'bearer').
+  timeout: 10          # Timeout in seconds for API requests (default: 10).
+
 # Logging settings.
 logging:
   level: "INFO"                 # Logging level: DEBUG, INFO, WARN, ERROR (default: INFO).

@@ -28,7 +28,7 @@ dnsblchk = "main:main"
 
 [tool.setuptools]
 # Explicitly list py_modules since sources are top-level, not in a package dir.
-py-modules = ["config","dnscheck","files","logger","mail","main","rblcheck","signals","webhook"]
+py-modules = ["api_client","config","dnscheck","files","logger","mail","main","rblcheck","signals","webhook"]
 
 [tool.setuptools.package-data]
 # Include service file and config directory contents.

@@ -309,6 +309,94 @@ class Config:
         # Return webhook timeout with default of 10 seconds.
         return webhooks_config.get('timeout', 10)
 
+    def is_api_update_enabled(self) -> bool:
+        """
+        Returns whether API-based IP update is enabled.
+        When enabled, IP addresses are fetched from an API before each check run.
+
+        Returns:
+            bool: True if API update is enabled (default: False).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return api_update enabled setting with default of False.
+        return api_update_config.get('enabled', False)
+
+    def get_api_update_url(self) -> str:
+        """
+        Returns the API URL for fetching IP addresses.
+        The API should return text/plain with one IP per line.
+
+        Returns:
+            str: The API endpoint URL (default: empty string).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return API URL with default of empty string.
+        return api_update_config.get('url', '')
+
+    def get_api_update_auth_type(self) -> str:
+        """
+        Returns the authentication type for the API.
+        Supported types: 'none', 'basic', 'bearer'.
+
+        Returns:
+            str: The authentication type (default: 'none').
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return auth type with default of 'none'.
+        return api_update_config.get('auth_type', 'none')
+
+    def get_api_update_username(self) -> str:
+        """
+        Returns the username for basic authentication.
+
+        Returns:
+            str: The username (default: empty string).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return username with default of empty string.
+        return api_update_config.get('username', '')
+
+    def get_api_update_password(self) -> str:
+        """
+        Returns the password for basic authentication.
+
+        Returns:
+            str: The password (default: empty string).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return password with default of empty string.
+        return api_update_config.get('password', '')
+
+    def get_api_update_bearer_token(self) -> str:
+        """
+        Returns the bearer token for bearer authentication.
+
+        Returns:
+            str: The bearer token (default: empty string).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return bearer token with default of empty string.
+        return api_update_config.get('bearer_token', '')
+
+    def get_api_update_timeout(self) -> int:
+        """
+        Returns the timeout for API requests in seconds.
+        Specifies how long to wait for an API response before timing out.
+
+        Returns:
+            int: Timeout in seconds (default: 10).
+        """
+        # Get api_update configuration section.
+        api_update_config = self._config_data.get('api_update', {})
+        # Return API timeout with default of 10 seconds.
+        return api_update_config.get('timeout', 10)
+
 
 # Create a single instance of the Config class to be used throughout the application
 config = Config()

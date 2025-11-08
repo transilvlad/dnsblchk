@@ -85,6 +85,29 @@ Webhooks use Slack-compatible JSON payload format and can be used with Slack, Di
 
 Examples: Slack (`https://hooks.slack.com/services/...`), Discord (`https://discordapp.com/api/webhooks/...`), or any custom HTTP endpoint.
 
+### API-Based IP Update
+-   `api_update.enabled`: If `true`, IP addresses will be fetched from an API before each check run. (Default: `false`)
+-   `api_update.url`: API endpoint URL that returns a text/plain response with one IP address per line.
+    - Example: `https://api.example.com/ips`
+    - The API must return a text/plain response with IP addresses separated by newlines
+    - If the API fetch fails, the existing `ips.txt` file will be used as fallback
+-   `api_update.auth_type`: Authentication type for the API. Options: `none`, `basic`, `bearer` (Default: `none`)
+-   `api_update.username`: Username for basic authentication (required if `auth_type` is `basic`)
+-   `api_update.password`: Password for basic authentication (required if `auth_type` is `basic`)
+-   `api_update.bearer_token`: Bearer token for bearer authentication (required if `auth_type` is `bearer`)
+-   `api_update.timeout`: Timeout in seconds for API requests. (Default: `10`)
+
+Example API response (text/plain):
+```
+192.168.1.1
+10.0.0.1
+172.16.0.1
+```
+
+**Note**: The API update feature allows you to dynamically update the list of IP addresses to check from an external source before each check cycle. This is useful for monitoring dynamic IP ranges or integrating with external inventory systems.
+
+Security tip: Use environment-specific secrets management for `password` and `bearer_token` instead of committing them to version control.
+
 ### Logging Settings
 -   `logging.level`: Logging level for the application. Can be `DEBUG`, `INFO`, `WARN`, or `ERROR`. (Default: `INFO`)
 -   `logging.console_print`: If `true`, log messages will be printed to console in addition to the log file. (Default: `true`)

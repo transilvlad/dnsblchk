@@ -1,6 +1,7 @@
 import sys
 import time
 
+from api_client import ApiClient
 from config import config
 from dnscheck import DNSCheck
 from files import FileHandler
@@ -27,6 +28,8 @@ class MainApplication:
         self.mail_client = None
         # Webhook client for posting notifications to external services.
         self.webhook_client = None
+        # API client for fetching IP addresses from an external API.
+        self.api_client = None
         # DNS RBL Checker instance for querying RBLs.
         self.dnsrbl_checker = None
         # Check handler that orchestrates DNS RBL checks.
@@ -80,6 +83,20 @@ class MainApplication:
         )
         self.logger.log_debug("Webhook client initialized successfully")
 
+        # Create API client if API update is enabled.
+        if config.is_api_update_enabled():
+            self.logger.log_debug(f"Setting up API client: url={config.get_api_update_url()}, auth_type={config.get_api_update_auth_type()}, timeout={config.get_api_update_timeout()}")
+            self.api_client = ApiClient(
+                url=config.get_api_update_url(),
+                auth_type=config.get_api_update_auth_type(),
+                username=config.get_api_update_username(),
+                password=config.get_api_update_password(),
+                bearer_token=config.get_api_update_bearer_token(),
+                timeout=config.get_api_update_timeout(),
+                logger=self.logger
+            )
+            self.logger.log_debug("API client initialized successfully")
+
         self.logger.log_debug(f"Setting up DNS RBL Checker with nameservers: {config.get_nameservers()}")
         # Create DNS RBL Checker instance with nameservers from config.
         self.dnsrbl_checker = RBLCheck(config.get_nameservers())
@@ -111,8 +128,34 @@ class MainApplication:
         # Create check handler with initialized clients.
         self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger, self.webhook_client)
 
+    def _update_ips_from_api(self):
+        """
+        Update IP addresses from the API if API update is enabled.
+        If successful, updates self.ips with the fetched IPs.
+        If failed, keeps the existing IPs from the config file.
+        """
+        if not config.is_api_update_enabled():
+            self.logger.log_debug("API update is disabled, skipping IP update from API")
+            return
+
+        if not self.api_client:
+            self.logger.log_warning("API update is enabled but API client was not initialized")
+            return
+
+        self.logger.log_info("Attempting to update IP addresses from API")
+        success, ips, error = self.api_client.fetch_ips()
+
+        if success and ips:
+            # Convert IPs to the format expected by the checker (list of lists)
+            self.ips = [[ip] for ip in ips]
+            self.logger.log_info(f"Successfully updated {len(ips)} IP address(es) from API")
+        else:
+            self.logger.log_warning(f"Failed to update IPs from API: {error}. Using existing ips.txt configuration.")
+
     def _run_checks(self):
         """Run the DNS RBL checks against all servers and IPs."""
+        # Update IPs from API if enabled before running checks.
+        self._update_ips_from_api()
         # Delegate to check handler to perform the actual checks.
         self.check_handler.run(self.servers, self.ips)
 

@@ -56,6 +56,7 @@ echo "Start: systemctl start dnsblchk.service"
 %files
 %license LICENSE
 %doc README.md
+%{python3_sitelib}/api_client.py
 %{python3_sitelib}/config.py
 %{python3_sitelib}/dnscheck.py
 %{python3_sitelib}/files.py
