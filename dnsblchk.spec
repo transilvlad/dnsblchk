@@ -36,7 +36,7 @@ install -d -m 755 %{buildroot}/%{_unitdir}
 install -d -m 755 %{buildroot}/var/log/%{src_name}
 install -d -m 755 %{buildroot}/var/run/%{src_name}
 install -m 644 dnsblchk.service %{buildroot}/%{_unitdir}/dnsblchk.service
-install -m 644 config/config.yaml.template %{buildroot}/%{_sysconfdir}/%{src_name}/config.yaml
+install -m 644 config/config.yaml %{buildroot}/%{_sysconfdir}/%{src_name}/config.yaml
 
 %post
 %systemd_post dnsblchk.service

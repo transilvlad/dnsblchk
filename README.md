@@ -119,9 +119,6 @@ Mount the `config` and `logs` directories so they persist and can be edited with
 
 ```bash
 mkdir -p config logs
-# Ensure config/config.yaml exists (copy template if needed)
-cp config/config.yaml.template config/config.yaml
-# Edit config/config.yaml as desired.
 
 docker run --rm \
   -v "$(pwd)/config:/app/config" \

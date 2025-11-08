@@ -203,7 +203,7 @@ jobs:
           chmod +x debian/rules
           cat > debian/install <<'EOF'
           dnsblchk.service usr/lib/systemd/system/
-          config/config.yaml.template etc/dnsblchk/config.yaml
+          config/config.yaml etc/dnsblchk/config.yaml
           EOF
           cat > debian/changelog <<EOF
           dnsblchk ($VERSION-1) unstable; urgency=medium
