@@ -135,4 +135,3 @@ class Logger:
         """Returns the current time formatted as a string in GMT."""
         # Format current time in GMT format for consistent logging timestamps.
         return time.strftime("%d %b %Y %H:%M:%S", time.gmtime())
-        return time.strftime("%d %b %Y %H:%M:%S", time.gmtime())

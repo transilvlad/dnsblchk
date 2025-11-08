@@ -57,9 +57,9 @@ class TestConfigData:
 
     def test_config_email_section_enabled(self):
         """Test config email section when enabled."""
-        email_config = {'enabled': True, 'recipients': ['test@example.com']}
+        email_config = {'enabled': True, 'recipients': ['tony@example.com']}
         assert email_config['enabled'] is True
-        assert 'test@example.com' in email_config['recipients']
+        assert 'tony@example.com' in email_config['recipients']
 
     def test_config_email_section_disabled(self):
         """Test config email section when disabled."""
@@ -80,8 +80,8 @@ class TestConfigData:
 
     def test_email_recipients_list(self):
         """Test email recipients list."""
-        recipients = ['test1@example.com', 'test2@example.com']
-        assert recipients == ['test1@example.com', 'test2@example.com']
+        recipients = ['tony@example.com', 'pepper@example.com']
+        assert recipients == ['tony@example.com', 'pepper@example.com']
         assert len(recipients) == 2
 
     def test_email_recipients_empty(self):
@@ -270,3 +270,78 @@ class TestConfigData:
         """Test sleep hours configuration."""
         sleep_hours = 3
         assert sleep_hours == 3
+
+
+class TestConfigWebhooks:
+    """Test cases for webhook configuration."""
+
+    def test_config_webhooks_section_enabled(self):
+        """Test config webhooks section when enabled."""
+        webhooks_config = {
+            'enabled': True,
+            'urls': ['https://example.com/webhook', 'https://other.com/notify'],
+            'timeout': 10
+        }
+        assert webhooks_config['enabled'] is True
+        assert len(webhooks_config['urls']) == 2
+        assert webhooks_config['timeout'] == 10
+
+    def test_config_webhooks_section_disabled(self):
+        """Test config webhooks section when disabled."""
+        webhooks_config = {'enabled': False, 'urls': []}
+        assert webhooks_config['enabled'] is False
+        assert webhooks_config['urls'] == []
+
+    def test_config_webhooks_empty_urls(self):
+        """Test webhooks with empty URL list."""
+        webhooks_config = {'enabled': True, 'urls': []}
+        assert webhooks_config['enabled'] is True
+        assert webhooks_config['urls'] == []
+
+    def test_config_webhooks_single_url(self):
+        """Test webhooks with single URL."""
+        webhooks_config = {
+            'enabled': True,
+            'urls': ['https://example.com/webhook']
+        }
+        assert len(webhooks_config['urls']) == 1
+        assert webhooks_config['urls'][0] == 'https://example.com/webhook'
+
+    def test_config_webhooks_multiple_urls(self):
+        """Test webhooks with multiple URLs."""
+        webhooks_config = {
+            'enabled': True,
+            'urls': [
+                'https://example.com/webhook',
+                'https://slack.com/webhook',
+                'https://discord.com/webhook'
+            ]
+        }
+        assert len(webhooks_config['urls']) == 3
+        assert 'https://slack.com/webhook' in webhooks_config['urls']
+
+    def test_config_webhooks_timeout_default(self):
+        """Test webhooks timeout defaults to 10."""
+        webhooks_config = {'enabled': True, 'urls': ['https://example.com/webhook']}
+        timeout = webhooks_config.get('timeout', 10)
+        assert timeout == 10
+
+    def test_config_webhooks_timeout_custom(self):
+        """Test webhooks with custom timeout."""
+        webhooks_config = {
+            'enabled': True,
+            'urls': ['https://example.com/webhook'],
+            'timeout': 30
+        }
+        assert webhooks_config['timeout'] == 30
+
+    def test_config_webhooks_all_fields(self):
+        """Test webhooks configuration with all fields."""
+        webhooks_config = {
+            'enabled': True,
+            'urls': ['https://example.com/webhook', 'https://backup.com/webhook'],
+            'timeout': 15
+        }
+        assert webhooks_config['enabled'] is True
+        assert len(webhooks_config['urls']) == 2
+        assert webhooks_config['timeout'] == 15

@@ -1,3 +1,4 @@
+import sys
 import time
 
 from config import config
@@ -7,6 +8,7 @@ from logger import Logger, LogConfig
 from mail import MailClient
 from rblcheck import RBLCheck
 from signals import SignalHandler
+from webhook import WebhookClient
 
 
 class MainApplication:
@@ -23,6 +25,8 @@ class MainApplication:
         self.signal_handler = None
         # Mail client for sending email alerts.
         self.mail_client = None
+        # Webhook client for posting notifications to external services.
+        self.webhook_client = None
         # DNSRBL checker instance for querying blacklists.
         self.dnsrbl_checker = None
         # Check handler that orchestrates DNSBL checks.
@@ -43,6 +47,7 @@ class MainApplication:
         )
         # Initialize logger instance with the configuration.
         self.logger = Logger(log_config)
+        self.logger.log_debug(f"Logger configured: log_file={config.log_file}, log_dir={config.log_dir}, level={config.get_log_level()}")
 
     def _setup_signal_handlers(self):
         """Set up signal handlers for graceful shutdown."""
@@ -50,9 +55,11 @@ class MainApplication:
         self.signal_handler = SignalHandler()
         # Register SIGINT and SIGTERM signal handlers.
         self.signal_handler.setup_signal_handlers()
+        self.logger.log_debug("Signal handlers setup complete (SIGINT and SIGTERM)")
 
     def _setup_clients_and_checkers(self):
         """Initialize mail client and DNSRBL checker."""
+        self.logger.log_debug(f"Setting up mail client: smtp_host={config.get_smtp_host()}, smtp_port={config.get_smtp_port()}, use_tls={config.get_smtp_use_tls()}, use_ssl={config.get_smtp_use_ssl()}")
         # Create mail client for sending email notifications with auth and encryption settings.
         self.mail_client = MailClient(
             smtp_host=config.get_smtp_host(),
@@ -62,9 +69,21 @@ class MainApplication:
             use_tls=config.get_smtp_use_tls(),
             use_ssl=config.get_smtp_use_ssl()
         )
+        self.logger.log_debug("Mail client initialized successfully")
 
+        self.logger.log_debug(f"Setting up webhook client: webhook_urls={config.get_webhook_urls()}, timeout={config.get_webhook_timeout()}")
+        # Create webhook client with configured URLs and timeout.
+        self.webhook_client = WebhookClient(
+            webhook_urls=config.get_webhook_urls(),
+            timeout=config.get_webhook_timeout(),
+            logger=self.logger
+        )
+        self.logger.log_debug("Webhook client initialized successfully")
+
+        self.logger.log_debug(f"Setting up DNSRBL checker with nameservers: {config.get_nameservers()}")
         # Create DNSRBL checker instance with nameservers from config.
         self.dnsrbl_checker = RBLCheck(config.get_nameservers())
+        self.logger.log_debug("DNSRBL checker initialized successfully")
 
     def _load_configuration(self):
         """Load servers and IPs from configuration files."""
@@ -89,7 +108,7 @@ class MainApplication:
         self._load_configuration()
 
         # Create check handler with initialized clients.
-        self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger)
+        self.check_handler = DNSCheck(self.mail_client, self.dnsrbl_checker, self.logger, self.webhook_client)
 
     def _run_checks(self):
         """Run the DNSBL checks against all servers and IPs."""
@@ -143,6 +162,16 @@ def main():
     """
     Main entry point for the DNSBL checker service.
     """
+    # If a config path is provided as the first CLI argument, load it.
+    # Example: python3 main.py config/config-local.yaml
+    if len(sys.argv) > 1:
+        cfg_path = sys.argv[1]
+        try:
+            config.load(cfg_path)
+        except Exception as e:
+            print(f"Failed to load custom configuration from {cfg_path}: {e}")
+            raise
+
     app = MainApplication()
     app.run()
 

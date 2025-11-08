@@ -8,7 +8,7 @@ version = "1.0.1"
 description = "A DNS Blacklist Checker service."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [ { name = "DNSBL Checker", email = "contact@example.com" } ]
+authors = [ { name = "DNSBL Checker", email = "transilvlad@gmail.com" } ]
 requires-python = ">=3.9"
 urls = { homepage = "https://github.com/example/dnsblchk" }
 keywords = ["dns", "blacklist", "monitoring", "email", "rbl"]
@@ -19,7 +19,8 @@ classifiers = [
 ]
 dependencies = [
   "pyyaml",
-  "dnspython"
+  "dnspython",
+  "requests"
 ]
 
 [project.scripts]
@@ -27,7 +28,7 @@ dnsblchk = "main:main"
 
 [tool.setuptools]
 # Explicitly list py_modules since sources are top-level, not in a package dir.
-py-modules = ["config","dnscheck","files","logger","mail","main","rblcheck","signals"]
+py-modules = ["config","dnscheck","files","logger","mail","main","rblcheck","signals","webhook"]
 
 [tool.setuptools.package-data]
 # Include service file and config directory contents.

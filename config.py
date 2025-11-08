@@ -11,28 +11,54 @@ class Config:
     Supports nested configuration sections for logging, email, and threading.
     """
 
-    def __init__(self):
-        """Loads the configuration from config.yaml and resolves file paths."""
-        # Get the root directory of the application.
-        root_path = Path(__file__).parent
-        # Construct path to configuration file.
-        config_path = root_path / 'config/config.yaml'
+    def __init__(self, config_path: str | None = None):
+        """Loads the configuration from a YAML file and resolves file paths.
 
-        # Load YAML configuration file.
-        with open(config_path, 'r') as f:
-            self._config_data = yaml.safe_load(f)
+        Args:
+            config_path: Optional path to a YAML config file. If None, defaults to
+                         the repository `config/config.yaml` next to this module.
+        """
+        # store application root path for later path resolution
+        self._root_path = Path(__file__).parent
+        # internal storage for config data
+        self._config_data = {}
 
-        # Resolve all relative file paths to absolute paths.
+        # Load the provided config or default
+        self.load(config_path)
+
+    def load(self, config_path: str | Path | None = None):
+        """
+        Load or reload configuration from the given path.
+
+        If config_path is None, loads from the repository default: `config/config.yaml`.
+        Relative paths are resolved relative to the project root (module directory).
+        """
+        # Determine which path to use
+        if config_path is None:
+            path = self._root_path / 'config/config.yaml'
+        else:
+            p = Path(config_path)
+            # If a relative path was provided, interpret it relative to project root
+            path = p if p.is_absolute() else (self._root_path / p)
+
+        # Read YAML
+        with open(path, 'r') as f:
+            self._config_data = yaml.safe_load(f) or {}
+
+        # Resolve relative paths in the new config
         self._resolve_paths()
 
     def _resolve_paths(self):
         """Resolves all file paths in the config to be absolute."""
-        # Resolve servers file path to absolute.
-        self._config_data['servers_file'] = self._get_absolute_path('servers_file')
-        # Resolve IPs file path to absolute.
-        self._config_data['ips_file'] = self._get_absolute_path('ips_file')
-        # Resolve report directory path to absolute.
-        self._config_data['report_dir'] = self._get_absolute_path('report_dir')
+        # Resolve servers file path to absolute if present.
+        if 'servers_file' in self._config_data:
+            self._config_data['servers_file'] = self._get_absolute_path('servers_file')
+        # Resolve IPs file path to absolute if present.
+        if 'ips_file' in self._config_data:
+            self._config_data['ips_file'] = self._get_absolute_path('ips_file')
+        # Resolve report directory path to absolute if present.
+        if 'report_dir' in self._config_data:
+            self._config_data['report_dir'] = self._get_absolute_path('report_dir')
 
         # Resolve logging paths from nested logging config section.
         logging_config = self._config_data.get('logging', {})
@@ -45,8 +71,7 @@ class Config:
             log_filename = logging_config.get('log_file')
             if log_dir and log_filename:
                 # Create absolute path by combining log_dir with log_file.
-                root_path = Path(__file__).parent
-                abs_log_dir = root_path / log_dir
+                abs_log_dir = Path(log_dir) if isinstance(log_dir, Path) else (self._root_path / log_dir)
                 # Store the combined absolute path.
                 logging_config['log_file'] = abs_log_dir / log_filename
             else:
@@ -55,19 +80,17 @@ class Config:
 
     def _get_absolute_path(self, key: str) -> Path:
         """Returns an absolute path for a given config key."""
-        # Get application root directory.
-        root_path = Path(__file__).parent
         # Combine with relative path from config.
-        return root_path / self._config_data[key]
+        rel = self._config_data.get(key, '')
+        return Path(rel) if Path(rel).is_absolute() else (self._root_path / rel)
 
     def _get_absolute_path_from_logging(self, key: str) -> Path:
         """Returns an absolute path for a given key in the logging config."""
-        # Get application root directory.
-        root_path = Path(__file__).parent
         # Get logging configuration section.
         logging_config = self._config_data.get('logging', {})
         # Combine root with relative path from logging config.
-        return root_path / logging_config[key]
+        rel = logging_config.get(key, '')
+        return Path(rel) if Path(rel).is_absolute() else (self._root_path / rel)
 
     def __getattr__(self, name):
         """Provides attribute-style access to the configuration settings."""
@@ -246,6 +269,45 @@ class Config:
         threading_config = self._config_data.get('threading', {})
         # Return threading enabled setting with default of True.
         return threading_config.get('enabled', True)
+
+    def is_webhooks_enabled(self) -> bool:
+        """
+        Returns whether webhook alerting is enabled.
+        When enabled, webhook notifications are sent for listed IP addresses.
+
+        Returns:
+            bool: True if webhook alerting is enabled (default: False).
+        """
+        # Get webhooks configuration section.
+        webhooks_config = self._config_data.get('webhooks', {})
+        # Return webhooks enabled setting with default of False.
+        return webhooks_config.get('enabled', False)
+
+    def get_webhook_urls(self) -> list:
+        """
+        Returns the list of webhook URLs to notify.
+        Webhooks will receive alerts when IP addresses are found on blacklists.
+
+        Returns:
+            list: List of webhook URLs (default: empty list).
+        """
+        # Get webhooks configuration section.
+        webhooks_config = self._config_data.get('webhooks', {})
+        # Return webhook URLs list with default of empty list.
+        return webhooks_config.get('urls', [])
+
+    def get_webhook_timeout(self) -> int:
+        """
+        Returns the timeout for webhook requests in seconds.
+        Specifies how long to wait for a webhook response before timing out.
+
+        Returns:
+            int: Timeout in seconds (default: 10).
+        """
+        # Get webhooks configuration section.
+        webhooks_config = self._config_data.get('webhooks', {})
+        # Return webhook timeout with default of 10 seconds.
+        return webhooks_config.get('timeout', 10)
 
 
 # Create a single instance of the Config class to be used throughout the application

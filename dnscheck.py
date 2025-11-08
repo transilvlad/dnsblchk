@@ -9,6 +9,7 @@ from logger import Logger, LogConfig, LogLevel
 from mail import MailClient
 from rblcheck import RBLCheck
 from signals import SignalHandler
+from webhook import WebhookClient
 
 
 class DNSCheck:
@@ -17,7 +18,7 @@ class DNSCheck:
     Manages check coordination, result reporting, and email notifications.
     """
 
-    def __init__(self, mail_client: MailClient, dnsrbl_checker: RBLCheck, logger: Logger):
+    def __init__(self, mail_client: MailClient, dnsrbl_checker: RBLCheck, logger: Logger, webhook_client: WebhookClient = None):
         """
         Initialize the DNSBL Check Handler.
 
@@ -25,9 +26,12 @@ class DNSCheck:
             mail_client: MailClient instance for sending alerts.
             dnsrbl_checker: DNSRBLChecker instance for checking IPs.
             logger: Logger instance for logging.
+            webhook_client: WebhookClient instance for sending webhook notifications (optional).
         """
         # Mail client for sending email alerts on blacklisted IPs.
         self.mail_client = mail_client
+        # Webhook client for posting notifications to external services.
+        self.webhook_client = webhook_client
         # DNSRBL checker instance for performing blacklist queries.
         self.dnsrbl_checker = dnsrbl_checker
         # Logger instance for recording check results and errors.
@@ -214,9 +218,25 @@ class DNSCheck:
             # Log summary of check run.
             self.logger.log_info(f"Found {len(self.listed_ips)} listed IP addresses.")
 
-            # Send email notification if IPs were found and email is enabled.
-            if self.listed_ips and config.is_email_enabled():
-                self._send_email_report()
+            # Send notifications if IPs were found
+            if self.listed_ips:
+                self.logger.log_debug(f"Listed IPs detected: {list(self.listed_ips.keys())}")
+
+                # Send email notification if email is enabled.
+                if config.is_email_enabled():
+                    self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
+                    self._send_email_report()
+                else:
+                    self.logger.log_debug("Email notifications disabled in configuration")
+
+                # Send webhook notification if webhooks are enabled (independent of email).
+                if config.is_webhooks_enabled():
+                    self.logger.log_debug("Webhooks are enabled, proceeding with webhook notification")
+                    self._send_webhook_notification()
+                else:
+                    self.logger.log_debug("Webhooks are disabled in configuration")
+            else:
+                self.logger.log_debug("No listed IPs found, skipping email and webhook notifications")
 
         except Exception:
             # Capture exception information for logging.
@@ -235,6 +255,8 @@ class DNSCheck:
         Send an email report of the listed IP addresses.
         Sends individual emails to each configured recipient.
         """
+        self.logger.log_debug(f"Preparing to send email report for {len(self.listed_ips)} listed IP(s)")
+
         # Build email message with header.
         mail_text = "The following IP addresses were found on one or more DNS blacklists:\n\n"
         # Add each listed IP with servers it appears on.
@@ -242,7 +264,11 @@ class DNSCheck:
             mail_text += f"{ip} ===> {', '.join(servers)}\n"
 
         # Send email to each configured recipient.
-        for recipient in config.get_email_recipients():
+        recipients = config.get_email_recipients()
+        self.logger.log_debug(f"Sending emails to {len(recipients)} recipient(s)")
+
+        for recipient in recipients:
+            self.logger.log_debug(f"Sending email to: {recipient}")
             # Attempt to send email to this recipient.
             success, error = self.mail_client.send_plain(
                 to_email=recipient,
@@ -252,5 +278,39 @@ class DNSCheck:
             )
             # Log any email sending errors.
             if not success:
-                self.logger.log_error(f"Mailer error: {error}")
+                self.logger.log_error(f"Email send failed for {recipient}: {error}")
+            else:
+                self.logger.log_info(f"Email report sent successfully to {recipient}")
+
+
+    def _send_webhook_notification(self):
+        """
+        Send webhook notification for listed IP addresses.
+        Posts JSON data to all configured webhook URLs.
+        """
+       # Check if webhook client is available.
+        if not self.webhook_client:
+            self.logger.log_warn("Webhook client not available, skipping webhook notification")
+            return
+
+        self.logger.log_debug(f"_send_webhook_notification called for {len(self.listed_ips)} listed IP(s)")
+
+        # Prepare structured data for webhook payload.
+        webhook_data = {
+            "ips": self.listed_ips,
+            "count": len(self.listed_ips)
+        }
+
+        self.logger.log_debug(f"Webhook payload prepared: count={webhook_data['count']}, ips={list(self.listed_ips.keys())}")
+
+        # Send webhook notification.
+        success, errors = self.webhook_client.send_notification(webhook_data)
+
+        # Log webhook errors if any occurred.
+        if not success and errors:
+            self.logger.log_warn(f"Webhook notification completed with errors: {len(errors)} error(s)")
+            for error_msg in errors:
+                self.logger.log_error(f"Webhook error: {error_msg}")
+        elif success:
+            self.logger.log_info(f"Webhook notification completed successfully for {len(self.listed_ips)} listed IP(s)")
 

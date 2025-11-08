@@ -296,7 +296,7 @@ class TestDNSCheck:
         }
 
         with patch('dnscheck.config') as mock_config:
-            mock_config.get_email_recipients.return_value = ['admin@example.com']
+            mock_config.get_email_recipients.return_value = ['tony@example.com']
             mock_config.get_email_sender.return_value = 'noreply@example.com'
             mock_mail_client.send_plain.return_value = (True, None)
 
@@ -309,7 +309,7 @@ class TestDNSCheck:
         """Test that _send_email_report sends to all recipients."""
         dns_check.listed_ips = {'192.168.1.1': ['rbl.example.com']}
 
-        recipients = ['admin1@example.com', 'admin2@example.com']
+        recipients = ['happy@example.com', 'peter@example.com']
 
         with patch('dnscheck.config') as mock_config:
             mock_config.get_email_recipients.return_value = recipients

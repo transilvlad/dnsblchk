@@ -28,8 +28,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         success, error = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Test Subject',
             message='Test message body'
         )
@@ -47,8 +47,8 @@ class TestMailClient:
         mock_smtp.side_effect = ConnectionError("Connection refused")
 
         success, error = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Test Subject',
             message='Test message body'
         )
@@ -66,8 +66,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         client.send_plain(
-            to_email='recipient@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Subject Line',
             message='Message Body'
         )
@@ -78,8 +78,8 @@ class TestMailClient:
 
         # Verify message properties
         assert message['Subject'] == 'Subject Line'
-        assert message['From'] == 'sender@example.com'
-        assert message['To'] == 'recipient@example.com'
+        assert message['From'] == 'pepper@example.com'
+        assert message['To'] == 'tony@example.com'
 
     @patch('mail.smtplib.SMTP')
     def test_send_plain_with_special_characters(self, mock_smtp):
@@ -90,8 +90,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         success, error = client.send_plain(
-            to_email='test+tag@example.com',
-            from_email='sender@example.com',
+            to_email='tony+tag@example.com',
+            from_email='pepper@example.com',
             subject='Subject with émojis ���',
             message='Message with special chars: @#$%^&*()'
         )
@@ -109,26 +109,26 @@ class TestMailClient:
 
         # Send to first recipient
         client.send_plain(
-            to_email='recipient1@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Test',
             message='Test'
         )
 
         call_args1 = mock_connection.send_message.call_args[0][0]
-        assert call_args1['To'] == 'recipient1@example.com'
+        assert call_args1['To'] == 'tony@example.com'
 
         # Send to second recipient
         mock_connection.reset_mock()
         client.send_plain(
-            to_email='recipient2@example.com',
-            from_email='sender@example.com',
+            to_email='happy@example.com',
+            from_email='pepper@example.com',
             subject='Test',
             message='Test'
         )
 
         call_args2 = mock_connection.send_message.call_args[0][0]
-        assert call_args2['To'] == 'recipient2@example.com'
+        assert call_args2['To'] == 'happy@example.com'
 
     @patch('mail.smtplib.SMTP')
     def test_send_plain_empty_message(self, mock_smtp):
@@ -139,8 +139,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         success, error = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Empty Message',
             message=''
         )
@@ -158,8 +158,8 @@ class TestMailClient:
 
         long_message = 'A' * 10000
         success, error = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Long Message',
             message=long_message
         )
@@ -176,8 +176,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='peppr@example.com',
             subject='Test',
             message='Test'
         )
@@ -193,8 +193,8 @@ class TestMailClient:
         mock_smtp.side_effect = socket.timeout("Connection timeout")
 
         success, error = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Test',
             message='Test'
         )
@@ -211,8 +211,8 @@ class TestMailClient:
         mock_smtp.return_value.__enter__.return_value = mock_connection
 
         result = client.send_plain(
-            to_email='test@example.com',
-            from_email='sender@example.com',
+            to_email='tony@example.com',
+            from_email='pepper@example.com',
             subject='Test',
             message='Test'
         )
@@ -229,7 +229,7 @@ class TestMailClient:
         mock_conn = MagicMock()
         mock_smtp.return_value.__enter__.return_value = mock_conn
 
-        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+        client.send_plain('tony@example.com', 'pepper@example.com', 'Subject', 'Body')
 
         mock_conn.login.assert_called_once_with('user', 'pass')
 
@@ -240,7 +240,7 @@ class TestMailClient:
         mock_conn = MagicMock()
         mock_smtp.return_value.__enter__.return_value = mock_conn
 
-        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+        client.send_plain('tony@example.com', 'pepper@example.com', 'Subject', 'Body')
 
         mock_conn.login.assert_not_called()
 
@@ -251,7 +251,7 @@ class TestMailClient:
         mock_conn = MagicMock()
         mock_smtp.return_value.__enter__.return_value = mock_conn
 
-        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+        client.send_plain('tony@example.com', 'pepper@example.com', 'Subject', 'Body')
 
         mock_conn.starttls.assert_called_once()
 
@@ -262,7 +262,7 @@ class TestMailClient:
         mock_conn = MagicMock()
         mock_smtp_ssl.return_value.__enter__.return_value = mock_conn
 
-        client.send_plain('to@example.com', 'from@example.com', 'Subject', 'Body')
+        client.send_plain('tony@example.com', 'pepper@example.com', 'Subject', 'Body')
 
         # STARTTLS should not be called when SSL is used
         mock_conn.starttls.assert_not_called()
