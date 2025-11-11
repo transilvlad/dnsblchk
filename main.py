@@ -48,6 +48,13 @@ class MainApplication:
             level=config.get_log_level(),
             console_print=config.get_console_print()
         )
+        # Clear log file if configured
+        if config.get_clear_log_on_start() and config.log_file:
+            try:
+                with open(config.log_file, 'w') as f:
+                    pass  # Truncate log file
+            except Exception as e:
+                print(f"Failed to clear log file on start: {e}")
         # Initialize logger instance with the configuration.
         self.logger = Logger(log_config)
         self.logger.log_debug(f"Logger configured: log_file={config.log_file}, log_dir={config.log_dir}, level={config.get_log_level()}")

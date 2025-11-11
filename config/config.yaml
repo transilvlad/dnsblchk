@@ -3,6 +3,7 @@
 # General settings.
 run_once: false  # If true, the script will run once and then exit.
 sleep_hours: 3   # Hours to sleep between checks if run_once is false.
+keep_last_reports: 5 # Number of latest reports to keep, older ones will be deleted after notifications.
 
 # File paths.
 servers_file: "/etc/dnsblchk/servers.txt" # File containing the list of RBL servers.
@@ -58,3 +59,4 @@ logging:
   console_print: false          # Print logs to console in addition to file (default: true).
   log_dir: "/var/log/dnsblchk/" # Directory for log files.
   log_file: "dnsblchk.log"      # Log filename (will be combined with log_dir).
+  clear_log_on_start: true      # If true, erase log file contents before starting to log.

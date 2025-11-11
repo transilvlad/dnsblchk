@@ -55,11 +55,11 @@ class DNSCheck:
             server: The DNS RBL server to check against.
 
         Returns:
-            tuple: (ip, server, is_listed, result_details) or None if shutdown requested.
+            tuple: (ip, server, is_listed, result_details) or (None, None, None, None) if shutdown requested or error.
         """
         # Return early if shutdown has been requested.
         if SignalHandler().is_shutdown_requested:
-            return None
+            return (None, None, None, None)
 
         try:
             # Query DNS RBL server for the IP address.
@@ -69,7 +69,7 @@ class DNSCheck:
         except Exception as e:
             # Log error but don't fail the entire check run.
             self.logger.log_error(f"Error checking {ip} against {server}: {str(e)}")
-            return None
+            return (None, None, None, None)
 
     def _write_report(self, ip: str, server: str, result_details: str):
         """
@@ -235,6 +235,8 @@ class DNSCheck:
                     self._send_webhook_notification()
                 else:
                     self.logger.log_debug("Webhooks are disabled in configuration")
+                # Cleanup old reports after notifications
+                self._cleanup_old_reports()
             else:
                 self.logger.log_debug("No listed IPs found, skipping email and webhook notifications")
 
@@ -290,7 +292,7 @@ class DNSCheck:
         """
        # Check if webhook client is available.
         if not self.webhook_client:
-            self.logger.log_warn("Webhook client not available, skipping webhook notification")
+            self.logger.log_warning("Webhook client not available, skipping webhook notification")
             return
 
         self.logger.log_debug(f"_send_webhook_notification called for {len(self.listed_ips)} listed IP(s)")
@@ -305,4 +307,26 @@ class DNSCheck:
         if success:
             self.logger.log_info(f"Webhook notification sent successfully for {len(self.listed_ips)} listed IP(s)")
         else:
-            self.logger.log_warn(f"Webhook notification failed with errors: {errors}")
+            self.logger.log_warning(f"Webhook notification failed with errors: {errors}")
+
+    def _cleanup_old_reports(self):
+        """
+        Keeps only the last N report files in the report directory, deleting older ones.
+        """
+        from pathlib import Path
+        report_dir = config.report_dir
+        keep_n = config.get_keep_last_reports()
+        if not report_dir or not keep_n:
+            return
+        report_dir = Path(report_dir)
+        if not report_dir.exists():
+            return
+        # List all report_*.csv files, sort by mtime descending
+        report_files = sorted(report_dir.glob('report_*.csv'), key=lambda f: f.stat().st_mtime, reverse=True)
+        # Delete files beyond the N most recent
+        for old_file in report_files[keep_n:]:
+            try:
+                old_file.unlink()
+                self.logger.log_info(f"Deleted old report file: {old_file}")
+            except Exception as e:
+                self.logger.log_error(f"Failed to delete old report file {old_file}: {e}")

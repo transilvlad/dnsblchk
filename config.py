@@ -397,6 +397,19 @@ class Config:
         # Return API timeout with default of 10 seconds.
         return api_update_config.get('timeout', 10)
 
+    def get_clear_log_on_start(self) -> bool:
+        """
+        Returns whether the log file should be cleared on start.
+        """
+        logging_config = self._config_data.get('logging', {})
+        return logging_config.get('clear_log_on_start', False)
+
+    def get_keep_last_reports(self) -> int:
+        """
+        Returns the number of last reports to keep.
+        """
+        return self._config_data.get('keep_last_reports', 5)
+
 
 # Create a single instance of the Config class to be used throughout the application
 config = Config()
