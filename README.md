@@ -1,3 +1,5 @@
+![DNS RBL Checker](doc/splash.jpg)
+
 # DNS RBL Checker
 
 An open-source Python script and service for monitoring and reporting on DNS RBLs.
@@ -28,7 +30,7 @@ It is designed for ease of use, with a straightforward configuration and clear r
 ## Packaging
 
 For instructions on how to package the application into an RPM,
-please see the [Packaging Guide](PACKAGING.md).
+please see the [Packaging Guide](doc/PACKAGING.md).
 
 ## Configuration
 
@@ -195,3 +197,14 @@ docker compose pull
 docker compose up -d
 docker image prune -f
 ```
+
+## Contributions
+
+Contributions of any kind (bug fixes, new features...) are welcome!
+This is a development tool and as such it may not be perfect and may be lacking in some areas.
+
+Certain future functionalities can be marked with TODO comments throughout the code.
+This however does not mean they will be given priority or ever be done.
+
+Any merge request made should align to existing coding style and naming convention.
+Before submitting a pull request please run a comprehensive code quality analysis.
