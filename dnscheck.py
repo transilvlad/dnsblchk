@@ -55,11 +55,11 @@ class DNSCheck:
             server: The DNS RBL server to check against.
 
         Returns:
-            tuple: (ip, server, is_listed, result_details) or (None, None, None, None) if shutdown requested or error.
+            tuple: (ip, server, is_listed, result_details) or None if shutdown requested or error.
         """
         # Return early if shutdown has been requested.
         if SignalHandler().is_shutdown_requested:
-            return (None, None, None, None)
+            return None
 
         try:
             # Query DNS RBL server for the IP address.
@@ -69,7 +69,7 @@ class DNSCheck:
         except Exception as e:
             # Log error but don't fail the entire check run.
             self.logger.log_error(f"Error checking {ip} against {server}: {str(e)}")
-            return (None, None, None, None)
+            return None
 
     def _write_report(self, ip: str, server: str, result_details: str):
         """
