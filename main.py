@@ -1,5 +1,6 @@
 import sys
 import time
+from pathlib import Path
 
 from api_client import ApiClient
 from config import config
@@ -42,11 +43,14 @@ class MainApplication:
     def _setup_logger(self):
         """Set up the logger with config-driven settings."""
         # Create logger configuration from application config.
+        run_log_dir = config.get_run_log_dir()
         log_config = LogConfig(
             log_file=config.log_file,
             log_dir=config.log_dir,
             level=config.get_log_level(),
-            console_print=config.get_console_print()
+            console_print=config.get_console_print(),
+            run_log_dir=Path(run_log_dir) if run_log_dir else None,
+            keep_last_runs=config.get_keep_last_runs()
         )
         # Clear log file if configured
         if config.get_clear_log_on_start() and config.log_file:
@@ -190,20 +194,34 @@ class MainApplication:
         try:
             # Main event loop: continue running until shutdown is requested.
             while not self.signal_handler.is_shutdown_requested:
-                # Execute DNS RBL checks for all configured servers and IPs.
-                self.logger.log_debug("Starting DNS RBL check run.")
-                self._run_checks()
+                try:
+                    # Start new run log file
+                    self.logger.start_run()
 
-                # Check if run-once mode is enabled (useful for testing).
-                if config.run_once:
-                    self.logger.log_debug("Run-once mode enabled. Exiting.")
-                    break
+                    # Execute DNS RBL checks for all configured servers and IPs.
+                    self.logger.log_debug("Starting DNS RBL check run.")
+                    self._run_checks()
 
-                # Calculate sleep duration from configuration (in hours).
-                sleep_duration = config.sleep_hours * 3600
-                self.logger.log_info(f"Sleeping for {config.sleep_hours} hours...")
-                # Sleep while checking for shutdown signals periodically.
-                self._sleep_with_shutdown_check(sleep_duration)
+                    # End run log file
+                    self.logger.end_run()
+
+                    # Check if run-once mode is enabled (useful for testing).
+                    if config.run_once:
+                        self.logger.log_debug("Run-once mode enabled. Exiting.")
+                        break
+
+                    # Calculate sleep duration from configuration (in hours).
+                    sleep_duration = config.sleep_hours * 3600
+                    self.logger.log_info(f"Sleeping for {config.sleep_hours} hours...")
+                    # Sleep while checking for shutdown signals periodically.
+                    self._sleep_with_shutdown_check(sleep_duration)
+
+                except Exception as e:
+                    # Ensure cleanup on error
+                    self.logger.end_run()
+                    self.logger.log_error(f"Check cycle failed: {e}")
+                    if config.run_once:
+                        break
 
         finally:
             # Ensure cleanup happens regardless of how the loop exits.

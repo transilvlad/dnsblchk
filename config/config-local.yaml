@@ -37,9 +37,9 @@ email:
 
 # Webhook alerting.
 webhooks:
-  enabled: true # If true, webhook notifications will be sent if there are listed IPs.
+  enabled: false # If true, webhook notifications will be sent if there are listed IPs.
   # List of webhook URLs to post notifications to (e.g., ["https://example.com/webhook"]).
-  urls: ["https://dnsblchk.requestcatcher.com/"]
+  urls: []
   timeout: 10    # Timeout in seconds for webhook requests (default: 10).
 
 # API-based IP update.
@@ -60,3 +60,7 @@ logging:
   log_dir: "logs/"              # Directory for log files.
   log_file: "dnsblchk.log"      # Log filename (will be combined with log_dir).
   clear_log_on_start: true      # If true, erase log file contents before starting to log.
+  # Directory for per-run log files (used by Slack bot to capture specific runs)
+  run_log_dir: "logs/runs"
+  # Number of run log files to keep (older files are automatically deleted)
+  keep_last_runs: 10

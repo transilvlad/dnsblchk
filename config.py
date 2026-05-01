@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -143,6 +144,26 @@ class Config:
         logging_config = self._config_data.get('logging', {})
         # Return console print setting with default of True.
         return logging_config.get('console_print', True)
+
+    def get_run_log_dir(self) -> Optional[str]:
+        """
+        Returns the directory path for per-run log files.
+
+        Returns:
+            Optional[str]: Path to run log directory, or None if not configured.
+        """
+        logging_config = self._config_data.get('logging', {})
+        return logging_config.get('run_log_dir')
+
+    def get_keep_last_runs(self) -> int:
+        """
+        Returns the number of run log files to keep.
+
+        Returns:
+            int: Number of run log files to keep (default: 10).
+        """
+        logging_config = self._config_data.get('logging', {})
+        return logging_config.get('keep_last_runs', 10)
 
     def is_email_enabled(self) -> bool:
         """
@@ -409,6 +430,28 @@ class Config:
         Returns the number of last reports to keep.
         """
         return self._config_data.get('keep_last_reports', 5)
+
+    def get_active_suppressions(self) -> set:
+        """
+        Returns the set of IP addresses with active alert suppressions.
+        An IP is actively suppressed if today's date is on or before the 'until' date.
+
+        Returns:
+            set: Set of IP address strings that should be excluded from notifications.
+        """
+        from datetime import date
+        suppressions = self._config_data.get('suppressions', [])
+        active = set()
+        today = date.today()
+        for entry in suppressions:
+            until_str = entry.get('until', '')
+            try:
+                until_date = date.fromisoformat(until_str)
+                if today <= until_date:
+                    active.add(entry.get('ip', ''))
+            except (ValueError, TypeError):
+                continue
+        return active
 
 
 # Create a single instance of the Config class to be used throughout the application

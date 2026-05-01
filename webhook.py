@@ -1,4 +1,5 @@
-from typing import Tuple, Union, List, Optional
+from datetime import datetime, timezone
+from typing import Tuple, Union, List
 
 import requests
 
@@ -33,34 +34,97 @@ class WebhookClient:
                 for idx, url in enumerate(self.webhook_urls, 1):
                     self.logger.log_debug(f"  Webhook {idx}: {url}")
 
-    def _format_notification_text(self, data: dict = None) -> str:
+    # Maximum number of IP section blocks before truncation (Slack limit is 50 blocks total).
+    MAX_IP_BLOCKS = 45
+
+    def _build_blocks_payload(self, data: dict = None) -> dict:
         """
-        Format notification data as a single text string.
+        Build a Slack Block Kit payload for the notification.
 
         Args:
-            data: Dictionary with IP and server data.
+            data: Dictionary with 'ips' (dict of ip->servers) and 'count' (int).
 
         Returns:
-            Formatted text with IP information.
+            Dict with 'text' (fallback) and 'blocks' (Block Kit array).
         """
-        text = "DNS RBL Alert\n"
-        text += "-" * 20 + "\n\n"
+        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "DNS RBL Alert",
+                    "emoji": True
+                }
+            }
+        ]
 
         if data:
             ips = data.get("ips", {})
             count = data.get("count", 0)
 
-            text += f"Listed IPs: {count}\n\n"
+            fallback_text = f":rotating_light: DNS RBL Alert - {count} IP(s) listed"
+
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Listed IPs:*\n{count}"}
+                ]
+            })
+            blocks.append({"type": "divider"})
 
             if ips:
-                for ip, servers in ips.items():
-                    text += f"{ip} ===> {', '.join(servers)}\n"
-            else:
-                text += "No listed IPs found.\n"
-        else:
-            text += "No alert data available.\n"
+                ip_items = list(ips.items())
+                display_items = ip_items[:self.MAX_IP_BLOCKS]
+                overflow = len(ip_items) - self.MAX_IP_BLOCKS
 
-        return text
+                for ip, servers in display_items:
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f":warning: *{ip}*\n{', '.join(servers)}"
+                        }
+                    })
+
+                if overflow > 0:
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f":warning: *...and {overflow} more IP(s) not shown*"
+                        }
+                    })
+            else:
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "No listed IPs found."
+                    }
+                })
+        else:
+            fallback_text = "DNS RBL Alert - No alert data available"
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "No alert data available."
+                }
+            })
+
+        blocks.append({
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"Detected at {timestamp} UTC"
+                }
+            ]
+        })
+
+        return {"text": fallback_text, "blocks": blocks}
 
     def send_notification(self, data: dict = None) -> Tuple[bool, Union[None, List[str]]]:
         """
@@ -84,13 +148,12 @@ class WebhookClient:
         # List to collect error messages from failed requests.
         errors = []
 
-        # Format complete notification as single text field.
-        text = self._format_notification_text(data)
-        payload = {"text": text}
+        # Build Block Kit payload with structured blocks.
+        payload = self._build_blocks_payload(data)
 
         if self.logger:
             self.logger.log_debug(f"Preparing to send webhook notifications to {len(self.webhook_urls)} URL(s)")
-            self.logger.log_debug(f"Notification payload preview: {len(text)} characters")
+            self.logger.log_debug(f"Notification payload: {len(payload.get('blocks', []))} blocks")
 
         # Send to each configured webhook.
         for webhook_url in self.webhook_urls:

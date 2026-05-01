@@ -16,11 +16,13 @@ class LogConfig:
     """Configuration object for logging."""
 
     def __init__(
-        self,
-        log_file: Optional[Path] = None,
-        log_dir: Optional[Path] = None,
-        level: LogLevel = LogLevel.INFO,
-        console_print: bool = True,
+            self,
+            log_file: Optional[Path] = None,
+            log_dir: Optional[Path] = None,
+            level: LogLevel = LogLevel.INFO,
+            console_print: bool = True,
+            run_log_dir: Optional[Path] = None,
+            keep_last_runs: int = 10
     ):
         """
         Initialize the log configuration.
@@ -30,11 +32,15 @@ class LogConfig:
             log_dir: Path to the log directory. Will be created if it doesn't exist.
             level: Logging level (DEBUG, INFO, WARN, ERROR). Defaults to INFO.
             console_print: Enable printing logs to console. Defaults to True.
+            run_log_dir: Path to directory for per-run log files.
+            keep_last_runs: Number of run log files to keep.
         """
         self.log_file = log_file
         self.log_dir = log_dir
         self.level = level
         self.console_print = console_print
+        self.run_log_dir = run_log_dir
+        self.keep_last_runs = keep_last_runs
 
 
 class Logger:
@@ -48,10 +54,16 @@ class Logger:
             config: LogConfig object containing logging configuration.
         """
         self.config = config
+        self.run_file_handle = None
+        self.current_run_id = None
 
         # Create log directory if provided
         if self.config.log_dir:
             self._create_log_directory(self.config.log_dir)
+
+        # Create run log directory if provided
+        if self.config.run_log_dir:
+            self._create_log_directory(Path(self.config.run_log_dir))
 
     def log_error(self, message: str) -> None:
         """
@@ -117,6 +129,9 @@ class Logger:
         if self.config.console_print:
             print(log_message)
 
+        # Also write to run-specific log file if active
+        self._log_to_run_file(log_message)
+
     def _create_log_directory(self, log_dir: Path) -> None:
         """
         Creates the log directory if it doesn't exist.
@@ -135,3 +150,74 @@ class Logger:
         """Returns the current time formatted as a string in GMT."""
         # Format current time in GMT format for consistent logging timestamps.
         return time.strftime("%d %b %Y %H:%M:%S", time.gmtime())
+
+    def start_run(self) -> None:
+        """Start a new run - create timestamped run log file."""
+        if not self.config.run_log_dir:
+            return
+
+        from datetime import datetime
+        self.current_run_id = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # millisecond
+
+        run_file = Path(self.config.run_log_dir) / f"run-{self.current_run_id}.log"
+        run_file.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self.run_file_handle = open(run_file, 'w')
+            self.run_file_handle.write(f"=== Run started: {self.current_run_id} ===\n")
+            self.run_file_handle.flush()
+
+            # Create/update symlink to latest run
+            latest_link = Path(self.config.run_log_dir).parent / "latest-run.log"
+            try:
+                if latest_link.exists() or latest_link.is_symlink():
+                    latest_link.unlink()
+                latest_link.symlink_to(f"runs/run-{self.current_run_id}.log")
+            except Exception as e:
+                if self.config.console_print:
+                    print(f"Failed to create symlink to latest run: {e}")
+
+        except Exception as e:
+            if self.config.console_print:
+                print(f"Failed to start run file: {e}")
+            self.run_file_handle = None
+
+    def end_run(self) -> None:
+        """End the current run and cleanup old run files."""
+        if self.run_file_handle:
+            try:
+                self.run_file_handle.write(f"=== Run ended: {self.current_run_id} ===\n")
+                self.run_file_handle.close()
+            except Exception as e:
+                if self.config.console_print:
+                    print(f"Failed to close run file: {e}")
+            finally:
+                self.run_file_handle = None
+                self.current_run_id = None
+
+            # Cleanup old run files
+            self._cleanup_old_runs()
+
+    def _log_to_run_file(self, message: str) -> None:
+        """Write message to run-specific log file if active."""
+        if self.run_file_handle:
+            try:
+                self.run_file_handle.write(message + '\n')
+                self.run_file_handle.flush()
+            except Exception as e:
+                if self.config.console_print:
+                    print(f"Failed to write to run file: {e}")
+
+    def _cleanup_old_runs(self) -> None:
+        """Delete old run files, keep last N."""
+        if not self.config.run_log_dir:
+            return
+
+        try:
+            run_files = sorted(Path(self.config.run_log_dir).glob("run-*.log"))
+            if len(run_files) > self.config.keep_last_runs:
+                for old_file in run_files[:-self.config.keep_last_runs]:
+                    old_file.unlink()
+        except Exception as e:
+            if self.config.console_print:
+                print(f"Failed to cleanup old run files: {e}")

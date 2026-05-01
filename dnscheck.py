@@ -222,19 +222,30 @@ class DNSCheck:
             if self.listed_ips:
                 self.logger.log_debug(f"Listed IPs detected: {list(self.listed_ips.keys())}")
 
-                # Send email notification if email is enabled.
-                if config.is_email_enabled():
-                    self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
-                    self._send_email_report()
-                else:
-                    self.logger.log_debug("Email notifications disabled in configuration")
+                # Filter out suppressed IPs from notifications.
+                suppressed = config.get_active_suppressions()
+                notification_ips = {ip: servers for ip, servers in self.listed_ips.items() if ip not in suppressed}
+                for ip in self.listed_ips:
+                    if ip in suppressed:
+                        self.logger.log_info(f"SUPPRESSED: {ip} is listed but notifications are suppressed")
 
-                # Send webhook notification if webhooks are enabled (independent of email).
-                if config.is_webhooks_enabled():
-                    self.logger.log_debug("Webhooks are enabled, proceeding with webhook notification")
-                    self._send_webhook_notification()
+                if notification_ips:
+                    # Send email notification if email is enabled.
+                    if config.is_email_enabled():
+                        self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
+                        self._send_email_report(notification_ips)
+                    else:
+                        self.logger.log_debug("Email notifications disabled in configuration")
+
+                    # Send webhook notification if webhooks are enabled (independent of email).
+                    if config.is_webhooks_enabled():
+                        self.logger.log_debug("Webhooks are enabled, proceeding with webhook notification")
+                        self._send_webhook_notification(notification_ips)
+                    else:
+                        self.logger.log_debug("Webhooks are disabled in configuration")
                 else:
-                    self.logger.log_debug("Webhooks are disabled in configuration")
+                    self.logger.log_debug("All listed IPs are suppressed, skipping notifications")
+
                 # Cleanup old reports after notifications
                 self._cleanup_old_reports()
             else:
@@ -252,17 +263,22 @@ class DNSCheck:
                 logger = Logger(log_config)
                 logger.log_error(error_details)
 
-    def _send_email_report(self):
+    def _send_email_report(self, ips: dict = None):
         """
         Send an email report of the listed IP addresses.
         Sends individual emails to each configured recipient.
+
+        Args:
+            ips: Dictionary of IPs to include in the report. Defaults to self.listed_ips.
         """
-        self.logger.log_debug(f"Preparing to send email report for {len(self.listed_ips)} listed IP(s)")
+        if ips is None:
+            ips = self.listed_ips
+        self.logger.log_debug(f"Preparing to send email report for {len(ips)} listed IP(s)")
 
         # Build email message with header.
         mail_text = "The following IP addresses were found on one or more DNS RBLs:\n\n"
         # Add each listed IP with servers it appears on.
-        for ip, servers in self.listed_ips.items():
+        for ip, servers in ips.items():
             mail_text += f"{ip} ===> {', '.join(servers)}\n"
 
         # Send email to each configured recipient.
@@ -285,22 +301,28 @@ class DNSCheck:
                 self.logger.log_info(f"Email report sent successfully to {recipient}")
 
 
-    def _send_webhook_notification(self):
+    def _send_webhook_notification(self, ips: dict = None):
         """
         Send webhook notification for listed IP addresses.
         Posts JSON data to all configured webhook URLs.
+
+        Args:
+            ips: Dictionary of IPs to include in the notification. Defaults to self.listed_ips.
         """
        # Check if webhook client is available.
         if not self.webhook_client:
             self.logger.log_warning("Webhook client not available, skipping webhook notification")
             return
 
-        self.logger.log_debug(f"_send_webhook_notification called for {len(self.listed_ips)} listed IP(s)")
+        if ips is None:
+            ips = self.listed_ips
+
+        self.logger.log_debug(f"_send_webhook_notification called for {len(ips)} listed IP(s)")
 
         # Prepare structured data for webhook payload.
         webhook_data = {
-            "ips": self.listed_ips,
-            "count": len(self.listed_ips)
+            "ips": ips,
+            "count": len(ips)
         }
         # Send notification and log result
         success, errors = self.webhook_client.send_notification(webhook_data)

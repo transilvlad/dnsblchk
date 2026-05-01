@@ -30,7 +30,7 @@ It is designed for ease of use, with a straightforward configuration and clear r
 ## Packaging
 
 For instructions on how to package the application into an RPM,
-please see the [Packaging Guide](doc/PACKAGING.md).
+please see the [Packaging Guide](PACKAGING.md).
 
 ## Configuration
 
@@ -78,14 +78,52 @@ to store `smtp_password` instead of committing plain text to version control.
     - Default: `[]` (empty list)
 -   `webhooks.timeout`: Timeout in seconds for webhook HTTP requests. (Default: `10`)
 
-Webhooks use Slack-compatible JSON payload format and can be used with Slack, Discord, or any custom HTTP endpoint:
+Webhooks use Slack Block Kit JSON payloads with a plain `text` fallback:
 ```json
 {
-  "text": "DNS RBL Alert\n--------------------\n\nListed IPs: 1\n\n192.168.1.1 ===> server1, server2\n",
+  "text": ":rotating_light: DNS RBL Alert - 1 IP(s) listed",
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "DNS RBL Alert",
+        "emoji": true
+      }
+    },
+    {
+      "type": "section",
+      "fields": [
+        {
+          "type": "mrkdwn",
+          "text": "*Listed IPs:*\n1"
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": ":warning: *192.168.1.1*\nserver1, server2"
+      }
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "Detected at 2026-01-15 10:30:00 UTC"
+        }
+      ]
+    }
+  ]
 }
 ```
 
-Examples: Slack (`https://hooks.slack.com/services/...`), Discord (`https://discordapp.com/api/webhooks/...`), or any custom HTTP endpoint.
+Examples: Slack (`https://hooks.slack.com/services/...`) or any custom HTTP endpoint that accepts Slack-style `blocks`.
 
 ### API-Based IP Update
 -   `api_update.enabled`: If `true`, IP addresses will be fetched from an API before each check run. (Default: `false`)
