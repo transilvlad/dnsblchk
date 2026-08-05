@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ]; then
+    deluser --system dnsblchk 2>/dev/null || true
+    delgroup --system dnsblchk 2>/dev/null || true
+    rm -f /etc/dnsblchk/config.yaml /etc/dnsblchk/ips.txt /etc/dnsblchk/rbls.txt /etc/dnsblchk/dbls.txt 2>/dev/null || true
+    rmdir /etc/dnsblchk 2>/dev/null || true
+    rm -rf /run/dnsblchk
+    rmdir /var/lib/dnsblchk 2>/dev/null || true
+fi
+
+exit 0

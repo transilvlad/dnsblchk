@@ -1,0 +1,5 @@
+dnsblchk.service usr/lib/systemd/system/
+config/config.yaml etc/dnsblchk/
+config/ips.txt etc/dnsblchk/
+config/rbls.txt etc/dnsblchk/
+config/dbls.txt etc/dnsblchk/

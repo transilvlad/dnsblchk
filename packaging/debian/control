@@ -1,0 +1,13 @@
+Source: dnsblchk
+Section: utils
+Priority: optional
+Maintainer: Vlad Marian <transilvlad@gmail.com>
+Build-Depends: debhelper-compat (= 13), python3, python3-setuptools, dh-python
+Standards-Version: 4.6.0
+Homepage: https://github.com/transilvlad/dnsblchk
+
+Package: dnsblchk
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}, python3-yaml, python3-dnspython, python3-requests
+Description: DNS Block List Checker service
+ Monitor IP addresses and derived domains against DNS block lists and alert by email or web hook.

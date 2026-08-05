@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if ! getent group dnsblchk >/dev/null; then
+    addgroup --system dnsblchk
+fi
+
+if ! id dnsblchk >/dev/null 2>&1; then
+    adduser --system --ingroup dnsblchk --home /var/lib/dnsblchk --no-create-home dnsblchk
+fi
+
+mkdir -p /var/lib/dnsblchk /var/log/dnsblchk /run/dnsblchk
+chown dnsblchk:dnsblchk /var/lib/dnsblchk /var/log/dnsblchk /run/dnsblchk
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+fi
+
+exit 0
