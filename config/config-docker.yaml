@@ -1,0 +1,59 @@
+# Docker runtime configuration for DNS Block List Checker.
+
+run_once: false
+sleep_hours: 3
+keep_last_reports: 5
+
+rbls_file: "config/rbls.txt"
+dbls_file: "config/dbls.txt"
+ips_file: "config/ips.txt"
+report_dir: "logs/"
+
+address_groups:
+  example-primary:
+    - "192.0.2.0/24"
+  example-secondary:
+    - "198.51.100.0/24"
+
+nameservers:
+  - "208.67.222.222"
+  - "208.67.220.220"
+
+threading:
+  enabled: true
+  thread_count: 10
+
+email:
+  enabled: false
+  recipients:
+    - "tony@example.com"
+  sender: "dnsblchk@example.com"
+  smtp_host: "localhost"
+  smtp_port: 25
+  smtp_user: ""
+  smtp_password: ""
+  use_tls: false
+  use_ssl: false
+
+webhooks:
+  enabled: false
+  urls: []
+  timeout: 10
+
+api_update:
+  enabled: false
+  url: ""
+  auth_type: "none"
+  username: ""
+  password: ""
+  bearer_token: ""
+  timeout: 10
+
+logging:
+  level: "INFO"
+  console_print: true
+  log_dir: "logs/"
+  log_file: "dnsblchk.log"
+  clear_log_on_start: true
+  run_log_dir: "logs/runs"
+  keep_last_runs: 10

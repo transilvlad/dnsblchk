@@ -1,5 +1,5 @@
 [Unit]
-Description=DNS RBL Checker
+Description=DNS Block List Checker
 Documentation=file:///usr/share/doc/dnsblchk/README.md
 After=network.target network-online.target syslog.target
 Wants=network-online.target
@@ -13,10 +13,10 @@ User=dnsblchk
 Group=dnsblchk
 
 # Working directory
-WorkingDirectory=/opt/dnsblchk
+WorkingDirectory=/
 
 # Main command to execute
-ExecStart=/usr/bin/python3 /opt/dnsblchk/main.py
+ExecStart=/usr/bin/dnsblchk /etc/dnsblchk/config.yaml
 
 # Restart policy
 Restart=on-failure
@@ -32,7 +32,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/dnsblchk /var/run/dnsblchk
+ReadWritePaths=/var/log/dnsblchk /run/dnsblchk
 
 # Logging
 StandardOutput=journal

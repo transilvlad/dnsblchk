@@ -2,6 +2,9 @@
 *.pyc
 logs/
 dist/
+build/
+.coverage
+htmlcov/
 debian/
 *.egg-info/
 .pybuild/

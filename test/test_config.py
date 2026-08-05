@@ -1,6 +1,9 @@
 """Unit tests for the config module."""
 from pathlib import Path
 
+import pytest
+
+from config import Config, ENV_CONFIG_PATH
 from logger import LogLevel
 
 
@@ -34,17 +37,238 @@ class TestConfigLogLevel:
 class TestConfigData:
     """Test cases for configuration data structures."""
 
+    def test_config_can_be_created_without_loading_file(self):
+        """Test lazy configuration creation for packaged console startup."""
+        app_config = Config(auto_load=False)
+
+        assert app_config.is_loaded() is False
+        assert app_config.loaded_path is None
+
+    def test_load_uses_environment_config_path(self, tmp_path, monkeypatch):
+        """Test DNSBLCHK_CONFIG is used when no CLI path is provided."""
+        config_file = tmp_path / "custom.yaml"
+        config_file.write_text(
+            """
+run_once: true
+ips_file: "ips.txt"
+report_dir: "logs"
+logging:
+  log_dir: "logs"
+  log_file: "dnsblchk.log"
+""",
+            encoding="utf-8",
+        )
+        (tmp_path / "ips.txt").write_text("192.0.2.10\n", encoding="utf-8")
+        (tmp_path / "logs").mkdir()
+        monkeypatch.setenv(ENV_CONFIG_PATH, str(config_file))
+
+        app_config = Config(auto_load=False)
+        app_config.load()
+
+        assert app_config.loaded_path == config_file
+        assert app_config.ips_file == tmp_path / "ips.txt"
+        assert app_config.report_dir == tmp_path / "logs"
+
+    def test_relative_paths_fall_back_to_loaded_config_directory(self, tmp_path, monkeypatch):
+        """Test custom configs can keep data files next to the YAML file."""
+        config_file = tmp_path / "custom.yaml"
+        config_file.write_text(
+            """
+run_once: true
+ips_file: "ips.txt"
+report_dir: "logs"
+logging:
+  log_dir: "logs"
+  log_file: "dnsblchk.log"
+""",
+            encoding="utf-8",
+        )
+        (tmp_path / "ips.txt").write_text("192.0.2.10\n", encoding="utf-8")
+        (tmp_path / "logs").mkdir()
+        monkeypatch.chdir(tmp_path.parent)
+
+        app_config = Config(auto_load=False)
+        app_config.load(config_file)
+
+        assert app_config.ips_file == tmp_path / "ips.txt"
+        assert app_config.log_file == tmp_path / "logs" / "dnsblchk.log"
+
+    def test_resolve_config_path_raises_when_no_candidate_exists(self, tmp_path, monkeypatch):
+        """Test a missing default config gives a useful failure."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv(ENV_CONFIG_PATH, raising=False)
+        app_config = Config(auto_load=False)
+        app_config._root_path = tmp_path / "missing-root"
+
+        with pytest.raises(FileNotFoundError, match="No configuration file found"):
+            app_config.resolve_config_path()
+
+    def test_getters_return_defaults_from_empty_config(self):
+        """Test common getter defaults when optional sections are absent."""
+        app_config = Config(auto_load=False)
+
+        assert app_config.get_log_level() == LogLevel.INFO
+        assert app_config.get_console_print() is True
+        assert app_config.get_run_log_dir() is None
+        assert app_config.get_keep_last_runs() == 10
+        assert app_config.is_email_enabled() is False
+        assert app_config.get_email_recipients() == []
+        assert app_config.get_email_sender() == ""
+        assert app_config.get_smtp_host() == ""
+        assert app_config.get_smtp_port() == 25
+        assert app_config.get_smtp_user() == ""
+        assert app_config.get_smtp_password() == ""
+        assert app_config.get_smtp_use_tls() is False
+        assert app_config.get_smtp_use_ssl() is False
+        assert app_config.get_nameservers() == ["208.67.222.222"]
+        assert app_config.get_thread_count() == 10
+        assert app_config.is_threading_enabled() is True
+        assert app_config.is_webhooks_enabled() is False
+        assert app_config.get_webhook_urls() == []
+        assert app_config.get_webhook_timeout() == 10
+        assert app_config.is_api_update_enabled() is False
+        assert app_config.get_api_update_url() == ""
+        assert app_config.get_api_update_auth_type() == "none"
+        assert app_config.get_api_update_username() == ""
+        assert app_config.get_api_update_password() == ""
+        assert app_config.get_api_update_bearer_token() == ""
+        assert app_config.get_api_update_timeout() == 10
+        assert app_config.get_clear_log_on_start() is False
+        assert app_config.get_keep_last_reports() == 5
+        assert app_config.get_active_suppressions() == set()
+        assert app_config.get_address_groups() == {}
+        assert app_config.get_rbls_file() is None
+        assert app_config.get_dbls_file() is None
+
+    def test_getters_return_configured_values(self, tmp_path):
+        """Test getter methods against concrete configured values."""
+        app_config = Config(auto_load=False)
+        rbls_file = tmp_path / "rbls.txt"
+        dbls_file = tmp_path / "dbls.txt"
+        app_config._config_data = {
+            "keep_last_reports": 2,
+            "rbls_file": rbls_file,
+            "dbls_file": str(dbls_file),
+            "nameservers": ["1.1.1.1"],
+            "threading": {"enabled": False, "thread_count": 0},
+            "logging": {
+                "level": "DEBUG",
+                "console_print": False,
+                "clear_log_on_start": True,
+                "run_log_dir": str(tmp_path / "runs"),
+                "keep_last_runs": 4,
+            },
+            "email": {
+                "enabled": True,
+                "recipients": ["admin@example.com"],
+                "sender": "dnsblchk@example.com",
+                "smtp_host": "mail.example.com",
+                "smtp_port": 587,
+                "smtp_user": "user",
+                "smtp_password": "pass",
+                "use_tls": True,
+                "use_ssl": False,
+            },
+            "webhooks": {"enabled": True, "urls": ["https://example.com/webhook"], "timeout": 3},
+            "api_update": {
+                "enabled": True,
+                "url": "https://example.com/ips",
+                "auth_type": "basic",
+                "username": "api-user",
+                "password": "api-pass",
+                "bearer_token": "token",
+                "timeout": 6,
+            },
+        }
+
+        assert app_config.get_log_level() == LogLevel.DEBUG
+        assert app_config.get_console_print() is False
+        assert app_config.get_run_log_dir() == str(tmp_path / "runs")
+        assert app_config.get_keep_last_runs() == 4
+        assert app_config.is_email_enabled() is True
+        assert app_config.get_email_recipients() == ["admin@example.com"]
+        assert app_config.get_email_sender() == "dnsblchk@example.com"
+        assert app_config.get_smtp_host() == "mail.example.com"
+        assert app_config.get_smtp_port() == 587
+        assert app_config.get_smtp_user() == "user"
+        assert app_config.get_smtp_password() == "pass"
+        assert app_config.get_smtp_use_tls() is True
+        assert app_config.get_smtp_use_ssl() is False
+        assert app_config.get_nameservers() == ["1.1.1.1"]
+        assert app_config.get_thread_count() == 1
+        assert app_config.is_threading_enabled() is False
+        assert app_config.is_webhooks_enabled() is True
+        assert app_config.get_webhook_urls() == ["https://example.com/webhook"]
+        assert app_config.get_webhook_timeout() == 3
+        assert app_config.is_api_update_enabled() is True
+        assert app_config.get_api_update_url() == "https://example.com/ips"
+        assert app_config.get_api_update_auth_type() == "basic"
+        assert app_config.get_api_update_username() == "api-user"
+        assert app_config.get_api_update_password() == "api-pass"
+        assert app_config.get_api_update_bearer_token() == "token"
+        assert app_config.get_api_update_timeout() == 6
+        assert app_config.get_clear_log_on_start() is True
+        assert app_config.get_keep_last_reports() == 2
+        assert app_config.get_rbls_file() == rbls_file
+        assert app_config.get_dbls_file() == dbls_file
+
+    def test_invalid_log_level_defaults_to_info(self, capsys):
+        """Test invalid log levels are reported and default to INFO."""
+        app_config = Config(auto_load=False)
+        app_config._config_data = {"logging": {"level": "NOPE"}}
+
+        assert app_config.get_log_level() == LogLevel.INFO
+        assert "Invalid log level" in capsys.readouterr().out
+
+    def test_suppressions_ignore_invalid_and_expired_entries(self):
+        """Test active suppression filtering."""
+        app_config = Config(auto_load=False)
+        app_config._config_data = {
+            "suppressions": [
+                {"ip": "192.0.2.10", "until": "2999-01-01"},
+                {"ip": "192.0.2.11", "until": "2000-01-01"},
+                {"ip": "192.0.2.12", "until": "invalid"},
+                {"ip": "192.0.2.13", "until": None},
+            ]
+        }
+
+        assert app_config.get_active_suppressions() == {"192.0.2.10"}
+
+    def test_address_groups_must_be_dict(self):
+        """Test non-dict address group config is ignored."""
+        app_config = Config(auto_load=False)
+        app_config._config_data = {"address_groups": ["bad"]}
+
+        assert app_config.get_address_groups() == {}
+
+    def test_getattr_supports_sections_and_missing_attributes(self):
+        """Test attribute-style access from nested sections."""
+        app_config = Config(auto_load=False)
+        app_config._config_data = {
+            "run_once": True,
+            "logging": {"log_dir": "logs"},
+            "email": {"sender": "dnsblchk@example.com"},
+        }
+
+        assert app_config.run_once is True
+        assert app_config.log_dir == "logs"
+        assert app_config.sender == "dnsblchk@example.com"
+        with pytest.raises(AttributeError):
+            _ = app_config.not_configured
+
     def test_config_dict_structure(self):
         """Test basic config dictionary structure."""
         config_data = {
-            'servers_file': 'config/servers.txt',
+            'rbls_file': 'config/rbls.txt',
+            'dbls_file': 'config/dbls.txt',
             'ips_file': 'config/ips.txt',
             'report_dir': 'logs/',
             'logging': {'log_dir': 'logs', 'log_file': 'app.log'},
             'email': {'enabled': False},
             'nameservers': ['8.8.8.8']
         }
-        assert config_data['servers_file'] == 'config/servers.txt'
+        assert config_data['rbls_file'] == 'config/rbls.txt'
+        assert config_data['dbls_file'] == 'config/dbls.txt'
         assert config_data['ips_file'] == 'config/ips.txt'
         assert config_data['report_dir'] == 'logs/'
 
@@ -187,10 +411,10 @@ class TestConfigData:
     def test_get_absolute_path_structure(self):
         """Test absolute path construction."""
         root_path = Path('/app')
-        relative_path = 'config/servers.txt'
+        relative_path = 'config/rbls.txt'
         full_path = root_path / relative_path
         # Use Path normalization to handle both Windows and Unix paths
-        assert 'servers.txt' in str(full_path)
+        assert 'rbls.txt' in str(full_path)
         assert 'config' in str(full_path)
 
     def test_nested_path_resolution(self):
@@ -212,11 +436,11 @@ class TestConfigData:
     def test_config_getattr_style(self):
         """Test attribute-style config access."""
         config_data = {
-            'servers_file': 'config/servers.txt',
+            'rbls_file': 'config/rbls.txt',
             'logging': {'log_dir': 'logs'}
         }
         # Test top-level access
-        assert config_data['servers_file'] == 'config/servers.txt'
+        assert config_data['rbls_file'] == 'config/rbls.txt'
         # Test nested access
         assert config_data['logging']['log_dir'] == 'logs'
 

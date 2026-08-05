@@ -1,0 +1,8 @@
+dbl.spamhaus.org
+sbl.spamhaus.org
+pbl.spamhaus.org
+multi.surbl.org
+pbl.surbl.org
+phishing.surbl.org
+abuse.rfc-ignorant.org
+dob.sibl.support-intelligence.net

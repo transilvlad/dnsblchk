@@ -54,7 +54,7 @@ class WebhookClient:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "DNS RBL Alert",
+                    "text": "DNS Block List Alert",
                     "emoji": True
                 }
             }
@@ -64,7 +64,7 @@ class WebhookClient:
             ips = data.get("ips", {})
             count = data.get("count", 0)
 
-            fallback_text = f":rotating_light: DNS RBL Alert - {count} IP(s) listed"
+            fallback_text = f":rotating_light: DNS Block List Alert - {count} IP(s) listed"
 
             blocks.append({
                 "type": "section",
@@ -105,7 +105,7 @@ class WebhookClient:
                     }
                 })
         else:
-            fallback_text = "DNS RBL Alert - No alert data available"
+            fallback_text = "DNS Block List Alert - No alert data available"
             blocks.append({
                 "type": "section",
                 "text": {

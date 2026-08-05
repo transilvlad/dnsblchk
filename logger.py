@@ -181,6 +181,7 @@ class Logger:
             if self.config.console_print:
                 print(f"Failed to start run file: {e}")
             self.run_file_handle = None
+            self.current_run_id = None
 
     def end_run(self) -> None:
         """End the current run and cleanup old run files."""

@@ -235,3 +235,63 @@ class TestRBLCheck:
         assert isinstance(result, list)
         assert result[0] == 'rbl.example.com'
         assert result[-1] == 'R'
+
+    @patch('rblcheck.dns.resolver.Resolver')
+    def test_check_domain_listed(self, mock_resolver_class):
+        """Test checking domain that is listed on DBL."""
+        checker = RBLCheck()
+
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+
+        mock_a = MagicMock()
+        mock_a.address = '127.0.1.2'
+
+        mock_txt = MagicMock()
+        mock_txt.strings = [b'reason=spam']
+
+        def _resolve(name, rtype):
+            if rtype == 'A':
+                return [mock_a]
+            if rtype == 'TXT':
+                return [mock_txt]
+            raise dns.resolver.NoAnswer()
+
+        mock_resolver.resolve.side_effect = _resolve
+
+        result = checker.check_domain('mail.example.com', 'dbl.example.com')
+
+        assert result is not False
+        assert result[0] == 'dbl.example.com'
+        assert '127.0.1.2' in result
+        assert any(entry.startswith('TXT=') for entry in result if isinstance(entry, str))
+        assert result[-1] == 'R'
+
+    @patch('rblcheck.dns.resolver.Resolver')
+    def test_check_domain_not_listed(self, mock_resolver_class):
+        """Test checking domain that is not listed on DBL."""
+        checker = RBLCheck()
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
+
+        result = checker.check_domain('mail.example.com', 'dbl.example.com')
+        assert result is False
+
+    def test_check_domain_empty_domain(self):
+        """Test empty domain returns False."""
+        checker = RBLCheck()
+        assert checker.check_domain('', 'dbl.example.com') is False
+
+    @patch('rblcheck.dns.resolver.Resolver')
+    def test_check_domain_uses_custom_nameservers(self, mock_resolver_class):
+        """Test that domain checks use configured nameservers."""
+        custom_ns = ['1.1.1.1', '1.0.0.1']
+        checker = RBLCheck(nameservers=custom_ns)
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
+
+        checker.check_domain('mail.example.com', 'dbl.example.com')
+
+        assert mock_resolver.nameservers == custom_ns

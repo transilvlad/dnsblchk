@@ -183,9 +183,13 @@ class TestDNSCheck:
                 with open(report_files[0], 'r') as f:
                     reader = csv.reader(f)
                     rows = list(reader)
-                    assert len(rows) == 1
-                    assert '192.168.1.1' in rows[0]
-                    assert 'rbl.example.com' in rows[0]
+                    assert len(rows) == 2
+                    assert rows[0] == [
+                        'timestamp', 'source_ip', 'check_type', 'target',
+                        'target_source', 'server', 'obm_server', 'response', 'txt_context'
+                    ]
+                    assert '192.168.1.1' in rows[1]
+                    assert 'rbl.example.com' in rows[1]
         finally:
             # Ensure file handle is closed for cleanup
             if dns_check.report_file_handler:
@@ -206,8 +210,11 @@ class TestDNSCheck:
                 mock_config.report_dir = temp_log_dir
                 mock_config.get_thread_count.return_value = 2
                 mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
 
-                dns_check.run(servers, ips)
+                dns_check.run(servers, [], ips)
 
                 # Should complete without error
                 assert dns_check.listed_ips == {}
@@ -230,8 +237,11 @@ class TestDNSCheck:
                 mock_config.report_dir = temp_log_dir
                 mock_config.get_thread_count.return_value = 2
                 mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
 
-                dns_check.run(servers, ips)
+                dns_check.run(servers, [], ips)
 
                 assert '192.168.1.1' in dns_check.listed_ips
         finally:
@@ -252,8 +262,11 @@ class TestDNSCheck:
                 mock_config.report_dir = temp_log_dir
                 mock_config.get_thread_count.return_value = 2
                 mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
 
-                dns_check.run([['rbl.example.com']], [['192.168.1.1']])
+                dns_check.run([['rbl.example.com']], [], [['192.168.1.1']])
 
                 # Check that it returned early
                 assert dns_check.listed_ips == {}
@@ -276,8 +289,11 @@ class TestDNSCheck:
                 mock_config.report_dir = temp_log_dir
                 mock_config.get_thread_count.return_value = 2
                 mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
 
-                dns_check.run(servers, ips)
+                dns_check.run(servers, [], ips)
 
                 # Report file should be closed
                 assert dns_check.report_file_handler is None or dns_check.report_file_handler.closed
@@ -362,11 +378,127 @@ class TestDNSCheck:
                 mock_config.report_dir = temp_log_dir
                 mock_config.get_thread_count.return_value = 4
                 mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
 
-                dns_check.run(servers, ips)
+                dns_check.run(servers, [], ips)
 
-                # Should call check 4 times (2 IPs × 2 servers)
+                # Should call check 4 times (2 IPs x 2 servers)
                 assert mock_rbl_checker.check.call_count == 4
+        finally:
+            if dns_check.report_file_handler:
+                try:
+                    dns_check.report_file_handler.close()
+                except Exception:
+                    pass
+
+    def test_run_respects_threading_disabled(self, dns_check, mock_rbl_checker, temp_log_dir):
+        """Test threading.enabled false runs checks without ThreadPoolExecutor."""
+        try:
+            mock_rbl_checker.check.return_value = False
+
+            with patch('dnscheck.config') as mock_config:
+                mock_config.report_dir = temp_log_dir
+                mock_config.get_thread_count.return_value = 4
+                mock_config.is_threading_enabled.return_value = False
+                mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
+
+                with patch('dnscheck.ThreadPoolExecutor') as mock_executor:
+                    dns_check.run([['rbl.example.com']], [], [['192.0.2.10']])
+
+                mock_executor.assert_not_called()
+                mock_rbl_checker.check.assert_called_once_with('192.0.2.10', 'rbl.example.com')
+        finally:
+            if dns_check.report_file_handler:
+                try:
+                    dns_check.report_file_handler.close()
+                except Exception:
+                    pass
+
+    def test_run_does_not_query_dbl_when_no_domain_targets(self, dns_check, mock_rbl_checker, temp_log_dir):
+        """Test DBL servers are skipped when PTR/apex derivation returns no targets."""
+        try:
+            mock_rbl_checker.check.return_value = False
+            dns_check.domain_resolver.derive_check_targets = MagicMock(return_value=set())
+
+            with patch('dnscheck.config') as mock_config:
+                mock_config.report_dir = temp_log_dir
+                mock_config.get_thread_count.return_value = 2
+                mock_config.is_threading_enabled.return_value = True
+                mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
+
+                dns_check.run([], [['dbl.example.com']], [['192.0.2.10']])
+
+                mock_rbl_checker.check_domain.assert_not_called()
+        finally:
+            if dns_check.report_file_handler:
+                try:
+                    dns_check.report_file_handler.close()
+                except Exception:
+                    pass
+
+    def test_get_address_group_returns_most_specific_match(self, dns_check):
+        """Test configured address groups use the most specific network match."""
+        with patch('dnscheck.config') as mock_config:
+            mock_config.get_address_groups.return_value = {
+                'shared': ['192.0.2.0/24'],
+                'specific': ['192.0.2.10/32'],
+            }
+
+            assert dns_check._get_address_group('192.0.2.10') == 'specific'
+            assert dns_check._get_address_group('192.0.2.11') == 'shared'
+            assert dns_check._get_address_group('198.51.100.1') == ''
+
+    def test_run_writes_dbl_target_in_report(self, dns_check, mock_rbl_checker, temp_log_dir):
+        """Test that DBL results write actual domain target and check type in CSV."""
+        try:
+            mock_rbl_checker.check.return_value = False
+            mock_rbl_checker.check_domain.return_value = ['dbl.example.com', '127.0.1.2', 'TXT=test', 'R']
+
+            rbl_servers = [['rbl.example.com']]
+            dbl_servers = [['dbl.example.com']]
+            ips = [['192.0.2.10']]
+
+            with patch('dnscheck.config') as mock_config:
+                mock_config.report_dir = temp_log_dir
+                mock_config.get_thread_count.return_value = 2
+                mock_config.is_email_enabled.return_value = False
+                mock_config.is_webhooks_enabled.return_value = False
+                mock_config.get_active_suppressions.return_value = set()
+                mock_config.get_keep_last_reports.return_value = 5
+                mock_config.get_address_groups.return_value = {}
+                mock_config.log_file = temp_log_dir / "test.log"
+
+                dns_check.domain_resolver.derive_check_targets = MagicMock(
+                    return_value={('mail.example.com', 'ptr'), ('example.com', 'apex')}
+                )
+
+                dns_check.run(rbl_servers, dbl_servers, ips)
+
+                report_files = list(temp_log_dir.glob('report_*.csv'))
+                assert len(report_files) > 0
+
+                with open(report_files[0], 'r') as f:
+                    reader = csv.reader(f)
+                    rows = list(reader)
+
+                assert rows[0] == [
+                    'timestamp', 'source_ip', 'check_type', 'target',
+                    'target_source', 'server', 'obm_server', 'response', 'txt_context'
+                ]
+                dbl_rows = [row for row in rows[1:] if len(row) >= 6 and row[2] in ('PTR', 'APEX')]
+                assert any(row[3] == 'mail.example.com' for row in dbl_rows)
+                assert any(row[3] == 'example.com' for row in dbl_rows)
+                assert all(row[5] == 'dbl.example.com' for row in dbl_rows)
+                assert all(row[7] == '127.0.1.2' for row in dbl_rows)
+                assert all(row[8] == 'test' for row in dbl_rows)
         finally:
             if dns_check.report_file_handler:
                 try:

@@ -3,7 +3,7 @@
 Name:           %{src_name}
 Version:        @VERSION@
 Release:        1%{?dist}
-Summary:        A DNS RBL Checker service
+Summary:        A DNS Block List Checker service
 License:        MIT
 URL:            https://github.com/transilvlad/dnsblchk
 Source0:        %{src_name}-%{version}.tar.gz
@@ -14,13 +14,15 @@ BuildRequires:  python3-pip
 BuildRequires:  python3-setuptools
 
 Requires:       python3
-Requires:       python3-pip
+Requires:       python3-PyYAML
+Requires:       python3-dns
+Requires:       python3-requests
 Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
 
 %description
-Monitor IP addresses against DNS RBLs and alert by email or web hook.
+Monitor IP addresses against DNS block lists and alert by email or web hook.
 
 %prep
 %setup -q -n %{src_name}-%{version}
@@ -35,14 +37,19 @@ install -d -m 755 %{buildroot}/%{_sysconfdir}/%{src_name}
 install -d -m 755 %{buildroot}/%{_unitdir}
 install -d -m 755 %{buildroot}/var/log/%{src_name}
 install -d -m 755 %{buildroot}/var/run/%{src_name}
+install -d -m 755 %{buildroot}/var/lib/%{src_name}
 install -m 644 dnsblchk.service %{buildroot}/%{_unitdir}/dnsblchk.service
 install -m 644 config/config.yaml %{buildroot}/%{_sysconfdir}/%{src_name}/config.yaml
+install -m 644 config/rbls.txt %{buildroot}/%{_sysconfdir}/%{src_name}/rbls.txt
+install -m 644 config/dbls.txt %{buildroot}/%{_sysconfdir}/%{src_name}/dbls.txt
+install -m 644 config/ips.txt %{buildroot}/%{_sysconfdir}/%{src_name}/ips.txt
 
 %post
 %systemd_post dnsblchk.service
-/usr/sbin/useradd -r -s /bin/false -d /opt/%{src_name} %{src_name} >/dev/null 2>&1 || :
+/usr/sbin/useradd -r -s /bin/false -d /var/lib/%{src_name} %{src_name} >/dev/null 2>&1 || :
 chown -R %{src_name}:%{src_name} /var/log/%{src_name}
 chown -R %{src_name}:%{src_name} /var/run/%{src_name}
+chown -R %{src_name}:%{src_name} /var/lib/%{src_name}
 echo "Installation complete. Configure /etc/dnsblchk/config.yaml"
 echo "Start: systemctl start dnsblchk.service"
 
@@ -59,6 +66,7 @@ echo "Start: systemctl start dnsblchk.service"
 %{python3_sitelib}/api_client.py
 %{python3_sitelib}/config.py
 %{python3_sitelib}/dnscheck.py
+%{python3_sitelib}/domaincheck.py
 %{python3_sitelib}/files.py
 %{python3_sitelib}/logger.py
 %{python3_sitelib}/mail.py
@@ -71,6 +79,10 @@ echo "Start: systemctl start dnsblchk.service"
 %{python3_sitelib}/dnsblchk-*.dist-info/*
 %{_bindir}/dnsblchk
 %config(noreplace) %{_sysconfdir}/%{src_name}/config.yaml
+%config(noreplace) %{_sysconfdir}/%{src_name}/rbls.txt
+%config(noreplace) %{_sysconfdir}/%{src_name}/dbls.txt
+%config(noreplace) %{_sysconfdir}/%{src_name}/ips.txt
 %{_unitdir}/dnsblchk.service
 /var/log/%{src_name}
 /var/run/%{src_name}
+/var/lib/%{src_name}

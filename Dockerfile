@@ -7,8 +7,8 @@ ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 
 # OCI labels (metadata-action in workflow will also add labels; these are fallbacks).
-LABEL org.opencontainers.image.title="DNSBL Checker" \
-      org.opencontainers.image.description="A DNS Blacklist Checker service." \
+LABEL org.opencontainers.image.title="DNS Block List Checker" \
+      org.opencontainers.image.description="A DNS Block List Checker service." \
       org.opencontainers.image.licenses="MIT"
 
 # Install minimal OS deps.
@@ -24,6 +24,7 @@ WORKDIR ${APP_DIR}
 
 # Copy dependency manifests first for layer caching.
 COPY pyproject.toml requirements.txt setup.py MANIFEST.in README.md LICENSE ./
+COPY doc ./doc
 # Copy source modules and config directory.
 COPY *.py ./
 COPY config ./config
@@ -45,4 +46,4 @@ USER appuser
 
 # Entrypoint uses the installed console script.
 ENTRYPOINT ["dnsblchk"]
-CMD []
+CMD ["config/config-docker.yaml"]

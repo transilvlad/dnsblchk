@@ -1,5 +1,10 @@
 include README.md
 include LICENSE
 include dnsblchk.service
+include run.py
+include run.sh
+include run.bat
 graft config
+graft doc
+graft packaging
 prune test

@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dnsblchk"
-version = "1.0.2"
-description = "A DNS RBL Checker service."
+version = "2.0.0"
+description = "A DNS Block List Checker service."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [ { name = "DNS RBL Checker", email = "transilvlad@gmail.com" } ]
-requires-python = ">=3.9"
+authors = [ { name = "DNS Block List Checker", email = "transilvlad@gmail.com" } ]
+requires-python = ">=3.10"
 urls = { homepage = "https://github.com/example/dnsblchk" }
-keywords = ["dns", "black list", "monitoring", "email", "rbl"]
+keywords = ["dns", "block list", "monitoring", "email", "rbl", "dbl"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
@@ -26,9 +26,24 @@ dependencies = [
 [project.scripts]
 dnsblchk = "main:main"
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "pytest-mock", "setuptools", "wheel", "build"]
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = [
+  "test/*",
+  "setup.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
 [tool.setuptools]
 # Explicitly list py_modules since sources are top-level, not in a package dir.
-py-modules = ["api_client","config","dnscheck","files","logger","mail","main","rblcheck","signals","webhook"]
+py-modules = ["api_client","config","dnscheck","domaincheck","files","logger","mail","main","rblcheck","signals","webhook"]
 
 [tool.setuptools.package-data]
 # Include service file and config directory contents.
@@ -39,4 +54,3 @@ py-modules = ["api_client","config","dnscheck","files","logger","mail","main","r
 
 [tool.setuptools.dynamic]
 # (Not used now; kept for future expansion.)
-

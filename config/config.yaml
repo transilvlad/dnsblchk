@@ -1,4 +1,4 @@
-# Configuration for DNS RBL Checker.
+# Configuration for DNS Block List Checker.
 
 # General settings.
 run_once: false  # If true, the script will run once and then exit.
@@ -6,18 +6,26 @@ sleep_hours: 3   # Hours to sleep between checks if run_once is false.
 keep_last_reports: 5 # Number of latest reports to keep, older ones will be deleted after notifications.
 
 # File paths.
-servers_file: "/etc/dnsblchk/servers.txt" # File containing the list of RBL servers.
-ips_file: "/etc/dnsblchk/ips.txt"         # File containing the list of IP addresses to check.
-report_dir: "/var/log/dnsblchk/"          # Directory for storing report files.
+rbls_file: "/etc/dnsblchk/rbls.txt" # File containing the list of IP-based RBL zones.
+dbls_file: "/etc/dnsblchk/dbls.txt" # File containing the list of domain-based DBL zones.
+ips_file: "/etc/dnsblchk/ips.txt"   # File containing the list of IP addresses to check.
+report_dir: "/var/log/dnsblchk/"    # Directory for storing report files.
 
-# DNS Nameservers for DNS RBL queries.
+# Optional labels for report grouping. Use documentation-reserved networks in the example config.
+address_groups:
+  example-primary:
+    - "192.0.2.0/24"
+  example-secondary:
+    - "198.51.100.0/24"
+
+# DNS nameservers for DNS block list queries.
 nameservers:
   - "208.67.222.222"  # OpenDNS nameserver.
   - "208.67.220.220"  # OpenDNS nameserver (secondary).
 
 # Threading settings.
 threading:
-  enabled: true    # Enable multithreading for DNS RBL checks (default: true).
+  enabled: true    # Enable multithreading for DNS block list checks (default: true).
   thread_count: 10 # Number of worker threads (default: 10, minimum: 1).
 
 # Email alerting.
@@ -37,9 +45,9 @@ email:
 
 # Webhook alerting.
 webhooks:
-  enabled: true # If true, webhook notifications will be sent if there are listed IPs.
+  enabled: false # If true, webhook notifications will be sent if there are listed IPs.
   # List of webhook URLs to post notifications to (e.g., ["https://example.com/webhook"]).
-  urls: ["https://dnsblchk.requestcatcher.com/"]
+  urls: []
   timeout: 10    # Timeout in seconds for webhook requests (default: 10).
 
 # API-based IP update.

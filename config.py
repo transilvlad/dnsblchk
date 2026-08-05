@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -6,54 +7,95 @@ import yaml
 from logger import LogLevel
 
 
+ENV_CONFIG_PATH = "DNSBLCHK_CONFIG"
+SYSTEM_CONFIG_PATH = Path("/etc/dnsblchk/config.yaml")
+
+
 class Config:
     """
     Handles loading the configuration from config.yaml and provides access to the settings.
     Supports nested configuration sections for logging, email, and threading.
     """
 
-    def __init__(self, config_path: str | None = None):
-        """Loads the configuration from a YAML file and resolves file paths.
+    def __init__(self, config_path: str | Path | None = None, auto_load: bool = True):
+        """Create a configuration object and optionally load a YAML file.
 
         Args:
-            config_path: Optional path to a YAML config file. If None, defaults to
-                         the repository `config/config.yaml` next to this module.
+            config_path: Optional path to a YAML config file.
+            auto_load: When true, load the selected config during initialization.
         """
         # store application root path for later path resolution
-        self._root_path = Path(__file__).parent
+        self._root_path = Path(__file__).resolve().parent
         # internal storage for config data
         self._config_data = {}
+        self._config_path: Optional[Path] = None
+        self._path_base = Path.cwd()
+        self._prefer_cwd_paths = True
 
-        # Load the provided config or default
-        self.load(config_path)
+        if auto_load:
+            self.load(config_path)
+
+    @property
+    def loaded_path(self) -> Optional[Path]:
+        """Return the currently loaded configuration path, if any."""
+        return self._config_path
+
+    def is_loaded(self) -> bool:
+        """Return true when a configuration file has been loaded."""
+        return self._config_path is not None
+
+    def get_local_config_path(self) -> Path:
+        """Return the repository-local sample config path."""
+        return self._root_path / 'config/config.yaml'
+
+    def resolve_config_path(self, config_path: str | Path | None = None) -> Path:
+        """Resolve the config path from CLI, environment, system, or local defaults."""
+        if config_path:
+            path = Path(config_path)
+            return path if path.is_absolute() else (Path.cwd() / path)
+
+        env_path = os.environ.get(ENV_CONFIG_PATH, '').strip()
+        if env_path:
+            path = Path(env_path)
+            return path if path.is_absolute() else (Path.cwd() / path)
+
+        candidates = [SYSTEM_CONFIG_PATH, self.get_local_config_path()]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        searched = ', '.join(str(candidate) for candidate in candidates)
+        raise FileNotFoundError(
+            f"No configuration file found. Pass a config path, set {ENV_CONFIG_PATH}, or create one of: {searched}"
+        )
 
     def load(self, config_path: str | Path | None = None):
         """
         Load or reload configuration from the given path.
 
-        If config_path is None, loads from the repository default: `config/config.yaml`.
+        If config_path is None, the loader checks DNSBLCHK_CONFIG,
+        /etc/dnsblchk/config.yaml, then the repository-local config/config.yaml.
         Relative paths are resolved relative to the project root (module directory).
         """
-        # Determine which path to use
-        if config_path is None:
-            path = self._root_path / 'config/config.yaml'
-        else:
-            p = Path(config_path)
-            # If a relative path was provided, interpret it relative to project root
-            path = p if p.is_absolute() else (self._root_path / p)
+        path = self.resolve_config_path(config_path)
 
         # Read YAML
         with open(path, 'r') as f:
             self._config_data = yaml.safe_load(f) or {}
+        self._config_path = path
+        self._path_base = Path.cwd()
+        self._prefer_cwd_paths = self._is_repo_style_config_path(path)
 
         # Resolve relative paths in the new config
         self._resolve_paths()
 
     def _resolve_paths(self):
         """Resolves all file paths in the config to be absolute."""
-        # Resolve servers file path to absolute if present.
-        if 'servers_file' in self._config_data:
-            self._config_data['servers_file'] = self._get_absolute_path('servers_file')
+        # Resolve block list server files to absolute paths.
+        if 'rbls_file' in self._config_data:
+            self._config_data['rbls_file'] = self._get_absolute_path('rbls_file')
+        if 'dbls_file' in self._config_data:
+            self._config_data['dbls_file'] = self._get_absolute_path('dbls_file')
         # Resolve IPs file path to absolute if present.
         if 'ips_file' in self._config_data:
             self._config_data['ips_file'] = self._get_absolute_path('ips_file')
@@ -72,18 +114,20 @@ class Config:
             log_filename = logging_config.get('log_file')
             if log_dir and log_filename:
                 # Create absolute path by combining log_dir with log_file.
-                abs_log_dir = Path(log_dir) if isinstance(log_dir, Path) else (self._root_path / log_dir)
+                abs_log_dir = Path(log_dir) if isinstance(log_dir, Path) else self._resolve_path(log_dir)
                 # Store the combined absolute path.
                 logging_config['log_file'] = abs_log_dir / log_filename
             else:
                 # Fallback to old behavior if either is missing.
                 logging_config['log_file'] = self._get_absolute_path_from_logging('log_file')
+        if 'run_log_dir' in logging_config:
+            logging_config['run_log_dir'] = self._get_absolute_path_from_logging('run_log_dir')
 
     def _get_absolute_path(self, key: str) -> Path:
         """Returns an absolute path for a given config key."""
         # Combine with relative path from config.
         rel = self._config_data.get(key, '')
-        return Path(rel) if Path(rel).is_absolute() else (self._root_path / rel)
+        return self._resolve_path(rel)
 
     def _get_absolute_path_from_logging(self, key: str) -> Path:
         """Returns an absolute path for a given key in the logging config."""
@@ -91,7 +135,47 @@ class Config:
         logging_config = self._config_data.get('logging', {})
         # Combine root with relative path from logging config.
         rel = logging_config.get(key, '')
-        return Path(rel) if Path(rel).is_absolute() else (self._root_path / rel)
+        return self._resolve_path(rel)
+
+    def _resolve_path(self, value: str | Path) -> Path:
+        """Resolve a configured path from likely runtime locations."""
+        path = Path(value)
+        if path.is_absolute():
+            return path
+
+        config_parent = self._config_path.parent if self._config_path else None
+        ordered_bases = (
+            (self._path_base, config_parent, self._root_path)
+            if self._prefer_cwd_paths
+            else (config_parent, self._path_base, self._root_path)
+        )
+        candidates = []
+        for base in ordered_bases:
+            if base is not None:
+                candidate = base / path
+                if candidate not in candidates:
+                    candidates.append(candidate)
+
+        local_config = self.get_local_config_path()
+        if self._config_path == local_config:
+            root_candidate = self._root_path / path
+            if root_candidate not in candidates:
+                candidates.append(root_candidate)
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        if self._config_path == local_config:
+            return self._root_path / path
+        return candidates[0]
+
+    def _is_repo_style_config_path(self, path: Path) -> bool:
+        """Return true when sample-style config paths should resolve from cwd/root."""
+        return path.parent in {
+            self._path_base / 'config',
+            self._root_path / 'config',
+        }
 
     def __getattr__(self, name):
         """Provides attribute-style access to the configuration settings."""
@@ -265,7 +349,7 @@ class Config:
 
     def get_thread_count(self) -> int:
         """
-        Returns the number of threads to use for concurrent DNS RBL checks.
+        Returns the number of threads to use for concurrent DNS block list checks.
         More threads can improve performance but consume more resources.
 
         Returns:
@@ -453,6 +537,25 @@ class Config:
                 continue
         return active
 
+    def get_address_groups(self) -> dict:
+        """Return generic address group labels mapped to configured IP/CIDR entries."""
+        groups = self._config_data.get('address_groups', {})
+        return groups if isinstance(groups, dict) else {}
 
-# Create a single instance of the Config class to be used throughout the application
-config = Config()
+    def get_rbls_file(self) -> Optional[Path]:
+        """Returns the absolute path to the RBL server list file."""
+        raw = self._config_data.get('rbls_file')
+        if not raw:
+            return None
+        return raw if isinstance(raw, Path) else Path(raw)
+
+    def get_dbls_file(self) -> Optional[Path]:
+        """Returns the absolute path to the DBL server list file."""
+        raw = self._config_data.get('dbls_file')
+        if not raw:
+            return None
+        return raw if isinstance(raw, Path) else Path(raw)
+
+
+# Create a single lazy instance of Config to be used throughout the application.
+config = Config(auto_load=False)

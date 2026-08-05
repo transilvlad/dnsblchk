@@ -220,7 +220,7 @@ class TestWebhookClient:
         assert "Alert" in payload['text']
         assert "blocks" in payload
         assert payload["blocks"][0]["type"] == "header"
-        assert payload["blocks"][0]["text"]["text"] == "DNS RBL Alert"
+        assert payload["blocks"][0]["text"]["text"] == "DNS Block List Alert"
 
     def test_build_blocks_payload_structure(self):
         """Test _build_blocks_payload returns correct Block Kit structure."""
@@ -235,7 +235,7 @@ class TestWebhookClient:
         # Header, section with fields, divider, 2 IP sections, context = 6 blocks
         assert len(blocks) == 6
         assert blocks[0]["type"] == "header"
-        assert blocks[0]["text"]["text"] == "DNS RBL Alert"
+        assert blocks[0]["text"]["text"] == "DNS Block List Alert"
         assert blocks[1]["type"] == "section"
         assert blocks[1]["fields"][0]["text"] == "*Listed IPs:*\n2"
         assert blocks[2]["type"] == "divider"

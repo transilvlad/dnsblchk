@@ -1,3 +1,4 @@
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -15,12 +16,14 @@ from webhook import WebhookClient
 
 class MainApplication:
     """
-    Main application class for the DNS RBL checker service.
+    Main application class for the DNS Block List Checker service.
     Orchestrates initialization, configuration loading, and the main check loop.
     """
 
-    def __init__(self):
+    def __init__(self, app_config=None):
         """Initialize the application with all instance variables set to None."""
+        if app_config is not None:
+            config.load(app_config)
         # Logger instance for application-wide logging.
         self.logger = None
         # Signal handler for graceful shutdown coordination.
@@ -31,12 +34,14 @@ class MainApplication:
         self.webhook_client = None
         # API client for fetching IP addresses from an external API.
         self.api_client = None
-        # DNS RBL Checker instance for querying RBLs.
+        # DNS block list checker instance for querying RBLs and DBLs.
         self.dnsrbl_checker = None
-        # Check handler that orchestrates DNS RBL checks.
+        # Check handler that orchestrates DNS block list checks.
         self.check_handler = None
         # List of DNS RBL servers loaded from configuration.
-        self.servers = None
+        self.rbls = None
+        # List of DNS DBL servers loaded from configuration.
+        self.dbls = None
         # List of IP addresses loaded from configuration.
         self.ips = None
 
@@ -72,7 +77,7 @@ class MainApplication:
         self.logger.log_debug("Signal handlers setup complete (SIGINT and SIGTERM)")
 
     def _setup_clients_and_checkers(self):
-        """Initialize mail client and DNS RBL Checker."""
+        """Initialize mail client and DNS block list checker."""
         self.logger.log_debug(f"Setting up mail client: smtp_host={config.get_smtp_host()}, smtp_port={config.get_smtp_port()}, use_tls={config.get_smtp_use_tls()}, use_ssl={config.get_smtp_use_ssl()}")
         # Create mail client for sending email notifications with auth and encryption settings.
         self.mail_client = MailClient(
@@ -108,19 +113,25 @@ class MainApplication:
             )
             self.logger.log_debug("API client initialized successfully")
 
-        self.logger.log_debug(f"Setting up DNS RBL Checker with nameservers: {config.get_nameservers()}")
-        # Create DNS RBL Checker instance with nameservers from config.
+        self.logger.log_debug(f"Setting up DNS block list checker with nameservers: {config.get_nameservers()}")
+        # Create DNS block list checker instance with nameservers from config.
         self.dnsrbl_checker = RBLCheck(config.get_nameservers())
-        self.logger.log_debug("DNS RBL Checker initialized successfully")
+        self.logger.log_debug("DNS block list checker initialized successfully")
 
     def _load_configuration(self):
         """Load servers and IPs from configuration files."""
         # Load DNS RBL servers from CSV file.
-        self.servers = FileHandler.load_csv(config.servers_file)
+        rbls_file = config.get_rbls_file()
+        self.rbls = FileHandler.load_csv(rbls_file) if rbls_file and rbls_file.exists() else []
+        # Load DNS DBL servers from CSV file.
+        dbls_file = config.get_dbls_file()
+        self.dbls = FileHandler.load_csv(dbls_file) if dbls_file and dbls_file.exists() else []
         # Load IP addresses to check from CSV file.
         self.ips = FileHandler.load_csv(config.ips_file)
         # Log summary of loaded configuration.
-        self.logger.log_info(f"Loaded {len(self.servers)} DNS RBL servers and {len(self.ips)} IP addresses.")
+        self.logger.log_info(
+            f"Loaded {len(self.rbls)} RBL servers, {len(self.dbls)} DBL servers, and {len(self.ips)} IP addresses."
+        )
 
     def _initialize(self):
         """Initialize all application components in proper order."""
@@ -164,11 +175,11 @@ class MainApplication:
             self.logger.log_warning(f"Failed to update IPs from API: {error}. Using existing ips.txt configuration.")
 
     def _run_checks(self):
-        """Run the DNS RBL checks against all servers and IPs."""
+        """Run the DNS block list checks against all servers and IPs."""
         # Update IPs from API if enabled before running checks.
         self._update_ips_from_api()
         # Delegate to check handler to perform the actual checks.
-        self.check_handler.run(self.servers, self.ips)
+        self.check_handler.run(self.rbls, self.dbls, self.ips)
 
     def _sleep_with_shutdown_check(self, duration: int):
         """
@@ -198,7 +209,7 @@ class MainApplication:
                     # Start new run log file
                     self.logger.start_run()
 
-                    # Execute DNS RBL checks for all configured servers and IPs.
+                    # Execute DNS block list checks for all configured servers and IPs.
                     self.logger.log_debug("Starting DNS RBL check run.")
                     self._run_checks()
 
@@ -228,19 +239,29 @@ class MainApplication:
             self.logger.log_info("DNSblChk service shutdown complete.")
 
 
-def main():
+def _parse_args(argv=None):
+    """Parse command-line arguments for direct and packaged execution."""
+    parser = argparse.ArgumentParser(description="DNS Block List Checker")
+    parser.add_argument("config_path", nargs="?", help="Path to a YAML configuration file")
+    parser.add_argument("-c", "--config", dest="config_option", help="Path to a YAML configuration file")
+    args = parser.parse_args(argv)
+
+    if args.config_path and args.config_option and args.config_path != args.config_option:
+        parser.error("provide only one config path")
+    return args.config_option or args.config_path
+
+
+def main(argv=None):
     """
-    Main entry point for the DNS RBL checker service.
+    Main entry point for the DNS Block List Checker service.
     """
-    # If a config path is provided as the first CLI argument, load it.
-    # Example: python3 main.py config/config-local.yaml
-    if len(sys.argv) > 1:
-        cfg_path = sys.argv[1]
-        try:
-            config.load(cfg_path)
-        except Exception as e:
-            print(f"Failed to load custom configuration from {cfg_path}: {e}")
-            raise
+    cfg_path = _parse_args(argv)
+    try:
+        config.load(cfg_path)
+    except Exception as e:
+        target = cfg_path if cfg_path else "default configuration locations"
+        print(f"Failed to load configuration from {target}: {e}", file=sys.stderr)
+        raise
 
     app = MainApplication()
     app.run()
