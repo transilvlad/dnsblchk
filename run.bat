@@ -81,7 +81,7 @@ if "!PYTHON_EXE!"=="" if exist "%SCRIPT_DIR%\.venv\Scripts\python.exe" set "PYTH
 if "!PYTHON_EXE!"=="" if exist "%SCRIPT_DIR%\venv\Scripts\python.exe" set "PYTHON_EXE=%SCRIPT_DIR%\venv\Scripts\python.exe"
 
 if "!PYTHON_EXE!"=="" (
-    echo [ERROR] Python 3.10+ not found in PATH or virtual environments
+    echo [ERROR] Python 3.14+ not found in PATH or virtual environments
     exit /b 1
 )
 

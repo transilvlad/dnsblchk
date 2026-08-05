@@ -85,7 +85,7 @@ The package version is defined in `pyproject.toml`. Build a Debian package with:
 bash build-deb.sh
 ```
 
-See [doc/PACKAGING.md](doc/PACKAGING.md) for complete packaging instructions.
+See [doc/PACKAGING.md](doc/PACKAGING.md) for complete packaging instructions. The project now targets Python 3.14.6.
 
 ## Contributing
 

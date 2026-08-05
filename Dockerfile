@@ -1,5 +1,5 @@
 # Use a slim Python base image
-FROM python:3.13-slim
+FROM python:3.14.6-slim
 
 ARG APP_NAME=dnsblchk
 ARG APP_DIR=/app

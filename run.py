@@ -102,7 +102,7 @@ class PythonFinder:
                 return False
             version = (result.stdout or result.stderr).strip().split()[1]
             major, minor, *_ = version.split(".")
-            return int(major) > 3 or (int(major) == 3 and int(minor) >= 10)
+            return int(major) > 3 or (int(major) == 3 and int(minor) >= 14)
         except (FileNotFoundError, IndexError, subprocess.TimeoutExpired, ValueError):
             return False
 
@@ -136,7 +136,7 @@ class Runner:
         self.default_config = self.root / "config" / "config-local.yaml"
         self.extended_config = self.root / "config" / "config-local-extended.yaml"
 
-    def config_path(self, extended: bool, custom_config: str | None) -> Path:
+    def config_path(self, extended: bool, custom_config: Optional[str]) -> Path:
         if custom_config:
             path = Path(custom_config)
             return path if path.is_absolute() else self.root / path
@@ -166,7 +166,7 @@ class Runner:
         Log.section("Locating Python")
         python_exe = PythonFinder.find()
         if not python_exe:
-            Log.error("Python 3.10+ not found in PATH or virtual environments")
+            Log.error("Python 3.14+ not found in PATH or virtual environments")
             return 1
         Log.info(f"Found Python: {python_exe}")
 

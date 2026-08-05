@@ -91,7 +91,7 @@ EXAMPLES:
   ./run.sh -e
 
 REQUIREMENTS:
-  - Python 3.10 or higher
+  - Python 3.14 or higher
   - Dependencies from requirements.txt installed
 EOF
 }
@@ -145,11 +145,11 @@ log_info "Configuration file validated"
 log_section "Locating Python"
 PYTHON_EXE="$(find_python || true)"
 if [[ -z "${PYTHON_EXE}" ]]; then
-    log_error "Python 3.10+ not found in PATH or virtual environments"
+    log_error "Python 3.14+ not found in PATH or virtual environments"
     exit 1
 fi
 if ! check_python_version "${PYTHON_EXE}"; then
-    log_error "Python version too old: $("${PYTHON_EXE}" --version 2>&1) (required: 3.10+)"
+    log_error "Python version too old: $("${PYTHON_EXE}" --version 2>&1) (required: 3.14+)"
     exit 1
 fi
 log_info "Found Python: ${PYTHON_EXE}"

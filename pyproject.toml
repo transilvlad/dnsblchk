@@ -9,7 +9,7 @@ description = "A DNS Block List Checker service."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [ { name = "DNS Block List Checker", email = "transilvlad@gmail.com" } ]
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 urls = { homepage = "https://github.com/example/dnsblchk" }
 keywords = ["dns", "block list", "monitoring", "email", "rbl", "dbl"]
 classifiers = [

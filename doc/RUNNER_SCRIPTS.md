@@ -10,7 +10,7 @@ The repository includes three local runner scripts:
 
 Each runner:
 
-- Detects Python 3.10 or newer.
+- Detects Python 3.14 or newer.
 - Prefers active virtual environments and local `.venv` directories.
 - Validates `main.py` and the selected config file.
 - Runs `main.py` with the selected config path.

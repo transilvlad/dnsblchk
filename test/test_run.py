@@ -1,3 +1,4 @@
+import os
 import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -33,15 +34,15 @@ class TestPythonFinder:
 
         candidates = run.PythonFinder._candidates()
 
-        assert "/tmp/venv/bin/python" in candidates
-        assert "/tmp/venv/Scripts/python.exe" in candidates
-        assert "/tmp/conda/bin/python" in candidates
+        assert os.path.join("/tmp/venv", "bin", "python") in candidates
+        assert os.path.join("/tmp/venv", "Scripts", "python.exe") in candidates
+        assert os.path.join("/tmp/conda", "bin", "python") in candidates
 
     @pytest.mark.parametrize(
         ("stdout", "returncode", "expected"),
         [
-            ("Python 3.10.0\n", 0, True),
-            ("Python 3.9.18\n", 0, False),
+            ("Python 3.14.0\n", 0, True),
+            ("Python 3.13.9\n", 0, False),
             ("", 1, False),
         ],
     )

@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import yaml
 
@@ -17,7 +17,7 @@ class Config:
     Supports nested configuration sections for logging, email, and threading.
     """
 
-    def __init__(self, config_path: str | Path | None = None, auto_load: bool = True):
+    def __init__(self, config_path: Optional[Union[str, Path]] = None, auto_load: bool = True):
         """Create a configuration object and optionally load a YAML file.
 
         Args:
@@ -48,7 +48,7 @@ class Config:
         """Return the repository-local sample config path."""
         return self._root_path / 'config/config.yaml'
 
-    def resolve_config_path(self, config_path: str | Path | None = None) -> Path:
+    def resolve_config_path(self, config_path: Optional[Union[str, Path]] = None) -> Path:
         """Resolve the config path from CLI, environment, system, or local defaults."""
         if config_path:
             path = Path(config_path)
@@ -69,7 +69,7 @@ class Config:
             f"No configuration file found. Pass a config path, set {ENV_CONFIG_PATH}, or create one of: {searched}"
         )
 
-    def load(self, config_path: str | Path | None = None):
+    def load(self, config_path: Optional[Union[str, Path]] = None):
         """
         Load or reload configuration from the given path.
 
@@ -137,7 +137,7 @@ class Config:
         rel = logging_config.get(key, '')
         return self._resolve_path(rel)
 
-    def _resolve_path(self, value: str | Path) -> Path:
+    def _resolve_path(self, value: Union[str, Path]) -> Path:
         """Resolve a configured path from likely runtime locations."""
         path = Path(value)
         if path.is_absolute():

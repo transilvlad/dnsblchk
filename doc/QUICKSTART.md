@@ -4,7 +4,7 @@ Get dnsblchk running locally with the sample configuration.
 
 ## Prerequisites
 
-- Python 3.10 or newer.
+- Python 3.14.6 or newer.
 - `pip`.
 
 ## Setup
@@ -79,6 +79,6 @@ Create that file from `config/config-local.yaml` if you want a second local prof
 ## Troubleshooting
 
 - `Config file not found`: restore `config/config-local.yaml` or pass `--config`.
-- `Python 3.10+ not found`: activate your virtual environment or install Python.
+- `Python 3.14+ not found`: activate your virtual environment or install Python.
 - `No module named yaml`: run `pip install -r requirements.txt`.
 - No DBL rows: the IP may not have a PTR record, or no derived domain is listed.

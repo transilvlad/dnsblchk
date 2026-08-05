@@ -17,7 +17,7 @@ For the RBL/DBL configuration break, the project version is `2.0.0`.
 `.github/workflows/build-packages.yml` runs:
 
 - Unit tests.
-- RPM builds for Rocky Linux 9, AlmaLinux 9, and Fedora latest.
+- RPM builds for Fedora latest.
 - A DEB build on Ubuntu.
 - Multi-arch Docker image publishing for version tags.
 - Release asset publishing for version tags.
