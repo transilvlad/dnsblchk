@@ -23,6 +23,22 @@ nameservers:
   - "208.67.222.222"  # OpenDNS nameserver.
   - "208.67.220.220"  # OpenDNS nameserver (secondary).
 
+# Confirmation nameservers (optional). Positive listings from the primary
+# resolvers above are re-queried through these and only reported if both
+# agree. Suppresses false positives from transient upstream DNS anomalies.
+# Leave empty to disable.
+nameservers_confirm: []
+
+# DBL persistence gate: require a DBL sighting to appear in this many
+# consecutive runs before it becomes an alertable listing. 1 restores
+# legacy single-run alerting. Applies to DBL checks only.
+require_consecutive_runs: 2
+
+# Pool-flood warning threshold: when this many IPs of one pool alert on
+# one DBL server via one shared apex, log a WARNING flagging the pattern
+# as a likely transient DNS anomaly. Set to 0 to disable.
+pool_flood_threshold: 20
+
 # Threading settings.
 threading:
   enabled: true    # Enable multithreading for DNS block list checks (default: true).
@@ -49,6 +65,10 @@ webhooks:
   # List of webhook URLs to post notifications to (e.g., ["https://example.com/webhook"]).
   urls: []
   timeout: 10    # Timeout in seconds for webhook requests (default: 10).
+  # Slack bot credentials — optional. When both are set, the run report CSV
+  # is uploaded to Slack alongside the webhook summary message.
+  slack_bot_token: ""
+  slack_channel_id: ""
 
 # API-based IP update.
 api_update:
@@ -60,6 +80,14 @@ api_update:
   password: ""         # Password for basic authentication (required if auth_type is 'basic').
   bearer_token: ""     # Bearer token for bearer authentication (required if auth_type is 'bearer').
   timeout: 10          # Timeout in seconds for API requests (default: 10).
+
+# Optional pools file for PoolResolver (Slack message enrichment).
+# Redundant when address_groups already covers your CIDRs — leave empty.
+pools_file: ""
+
+# Alert suppressions — mute notifications for specific IPs until a date.
+# IPs are still checked and logged; only webhook/email alerts are muted.
+suppressions: []
 
 # Logging settings.
 logging:

@@ -1,32 +1,106 @@
-from typing import Union, List
+from typing import List, Optional, Union
 
 import dns.resolver
 import dns.reversename
 
 
-class RBLCheck:
-    """Checks if IP addresses or domains are listed on DNS block list servers."""
+# RFC 5782 §5: DNSxL responses in 127.255.255.0/24 signal errors, not listings.
+# Spamhaus specifically uses:
+#   127.255.255.252  typing error / test address
+#   127.255.255.253  open-resolver test (query originated from an open resolver)
+#   127.255.255.254  anonymous query blocked (public/large DNS resolver)
+#   127.255.255.255  excessive queries — client is rate-limited
+def _is_error_response(address: str) -> bool:
+    return isinstance(address, str) and address.startswith('127.255.255.')
 
-    def __init__(self, nameservers: list = None):
+
+class RBLCheck:
+    """Checks if IP addresses are listed on DNS RBL/DBL servers."""
+
+    def __init__(
+        self,
+        nameservers: list = None,
+        nameservers_confirm: list = None,
+        logger=None,
+    ):
         """
-        Initialize the DNS block list checker.
+        Initialize the DNS RBL/DBL Checker.
 
         Args:
-            nameservers: List of DNS nameservers to use for queries.
-                        Defaults to OpenDNS servers if not provided.
-                        Example: ['208.67.222.222', '208.67.220.220']
+            nameservers: Primary DNS resolvers used for every query.
+            nameservers_confirm: Optional confirmation resolvers. If non-empty,
+                a positive result from the primary is re-queried via these
+                resolvers. The listing is only reported when the confirm
+                resolvers agree; otherwise it is dropped and a warning is
+                logged.
+            logger: Optional Logger instance used for DISPUTED / RBL-error
+                warnings. Silent if not provided.
         """
-        # List of DNS nameservers to query for block list checks.
-        # Uses OpenDNS servers by default for redundancy.
         if nameservers is None:
             nameservers = ['208.67.222.222', '208.67.220.220']
         self.nameservers = nameservers
+        self.nameservers_confirm = list(nameservers_confirm or [])
+        self.logger = logger
 
-    def _resolver(self) -> dns.resolver.Resolver:
-        """Create and configure a resolver instance."""
+    def _resolver(self, use_confirm: bool = False) -> dns.resolver.Resolver:
+        """Create a resolver instance bound to primary or confirm nameservers."""
         resolver = dns.resolver.Resolver()
-        resolver.nameservers = self.nameservers
+        resolver.nameservers = (
+            self.nameservers_confirm if use_confirm else self.nameservers
+        )
         return resolver
+
+    def _log_warning(self, msg: str):
+        if self.logger is not None:
+            try:
+                self.logger.log_warning(msg)
+            except Exception:
+                pass
+
+    def _query_addresses(
+        self,
+        query_name: str,
+        use_confirm: bool = False,
+    ) -> Optional[List[str]]:
+        """Return list of A-record addresses excluding RBL error codes.
+
+        Returns None on NXDOMAIN / NoAnswer / Timeout / any DNS error.
+        Returns [] if every answer was a 127.255.255.x error code.
+        """
+        try:
+            resolver = self._resolver(use_confirm=use_confirm)
+            answers = resolver.resolve(query_name, 'A')
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.Timeout):
+            return None
+        except Exception:
+            return None
+
+        raw = [rdata.address for rdata in answers]
+        listed = [a for a in raw if not _is_error_response(a)]
+        if raw and not listed:
+            self._log_warning(
+                f"RBL_ERROR_CODE: {query_name} returned only error responses "
+                f"{raw} via {'confirm' if use_confirm else 'primary'} resolvers "
+                f"{self.nameservers_confirm if use_confirm else self.nameservers} — treating as not listed"
+            )
+        return listed
+
+    def _confirm_listing(self, query_name: str) -> bool:
+        """Return True if confirm resolvers also see a valid listing.
+
+        Only called after primary resolver saw a valid listing. If no confirm
+        resolvers are configured, returns True (feature disabled).
+        """
+        if not self.nameservers_confirm:
+            return True
+        confirmed = self._query_addresses(query_name, use_confirm=True)
+        if confirmed:
+            return True
+        self._log_warning(
+            f"DISPUTED: {query_name} listed via primary {self.nameservers} "
+            f"but not confirmed via {self.nameservers_confirm} — dropping"
+        )
+        return False
 
     def check(self, ip: str, server: str) -> Union[bool, List[str]]:
         """Backward-compatible alias for IP-based RBL checks."""
@@ -45,40 +119,25 @@ class RBLCheck:
             A list with server, response address and 'R' if listed, otherwise False.
         """
         try:
-            # Reverse the IP address for the DNS query format.
             if '.' in ip:  # IPv4 address format.
-                # Handle IPv4-mapped IPv6 addresses by stripping prefix.
                 ip = ip.replace('::ffff:', '')
-                # Reverse octets for DNS reverse lookup.
                 rev_ip = '.'.join(reversed(ip.split('.')))
             else:  # IPv6 address format.
-                # Convert IPv6 address to reverse DNS notation.
                 rev_ip = dns.reversename.from_address(ip).to_text(omit_final_dot=True)
 
-            # Construct the query name for the DNS RBL server.
             query_name = f"{rev_ip}.{server}"
 
-            # Create resolver instance for DNS queries.
-            resolver = self._resolver()
+            listed = self._query_addresses(query_name)
+            if not listed:
+                return False
 
-            # Query the DNS RBL server for an A record (contains return code).
-            answers = resolver.resolve(query_name, 'A')
+            if not self._confirm_listing(query_name):
+                return False
 
-            # IP is listed, prepare the result list.
-            result = [server]
-            # Extract response address from DNS RBL return value.
-            for rdata in answers:
-                result.append(rdata.address)
-            # Append 'R' to indicate result (listing flag).
-            result.append('R')
-
+            result = [server, *listed, 'R']
             return result
 
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.Timeout):
-            # Not listed or other DNS resolution error; NXDOMAIN means IP is not on list.
-            return False
         except Exception:
-            # Any other exception means we can't be sure, so assume not listed.
             return False
 
     def check_domain(self, domain: str, server: str, include_txt_context: bool = True) -> Union[bool, List[str]]:
@@ -99,15 +158,19 @@ class RBLCheck:
                 return False
 
             query_name = f"{normalized_domain}.{server}"
-            resolver = self._resolver()
-            answers = resolver.resolve(query_name, 'A')
 
-            result = [server]
-            for rdata in answers:
-                result.append(rdata.address)
+            listed = self._query_addresses(query_name)
+            if not listed:
+                return False
+
+            if not self._confirm_listing(query_name):
+                return False
+
+            result = [server, *listed]
 
             if include_txt_context:
                 try:
+                    resolver = self._resolver()
                     txt_answers = resolver.resolve(query_name, 'TXT')
                     txt_values = []
                     for txt in txt_answers:
@@ -127,7 +190,5 @@ class RBLCheck:
             result.append('R')
             return result
 
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.Timeout):
-            return False
         except Exception:
             return False

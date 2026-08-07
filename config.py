@@ -347,6 +347,59 @@ class Config:
         # Ensure we have at least one nameserver.
         return nameservers if nameservers else ['208.67.222.222']
 
+    def get_nameservers_confirm(self) -> list:
+        """
+        Return confirmation DNS nameservers. When non-empty, positive RBL/DBL
+        listings from the primary resolver are re-queried through these
+        resolvers and only reported if they agree. Suppresses false positives
+        from transient upstream DNS anomalies.
+
+        Returns:
+            list: Confirmation nameservers (empty list disables the feature).
+        """
+        value = self._config_data.get('nameservers_confirm', [])
+        return list(value) if value else []
+
+    def get_require_consecutive_runs(self) -> int:
+        """
+        Minimum consecutive runs a DBL listing must appear in before it is
+        promoted from PENDING to a fireable alert. 1 = alert on first sighting
+        (legacy behaviour). 2 = require the listing to persist across one run
+        boundary before alerting.
+
+        Only applies to DBL (domain-based) checks. RBL/IP-based listings are
+        always alerted on first sighting.
+
+        Returns:
+            int: Consecutive-run requirement (default: 2, minimum: 1).
+        """
+        value = self._config_data.get('require_consecutive_runs', 2)
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return 2
+
+    def get_pool_flood_threshold(self) -> int:
+        """
+        Threshold at which a pool-wide DBL cascade emits a WARNING flagging
+        the pattern as likely upstream DNS noise. When this many IPs of one
+        pool alert on one DBL server via one shared apex, a POOL_FLOOD log
+        line is emitted alongside the alert.
+
+        Returns:
+            int: Threshold (default: 20, minimum: 2). Set to 0 to disable.
+        """
+        value = self._config_data.get('pool_flood_threshold', 20)
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return 20
+        if n < 0:
+            return 20
+        if n == 0:
+            return 0
+        return max(2, n)
+
     def get_thread_count(self) -> int:
         """
         Returns the number of threads to use for concurrent DNS block list checks.
@@ -413,6 +466,16 @@ class Config:
         webhooks_config = self._config_data.get('webhooks', {})
         # Return webhook timeout with default of 10 seconds.
         return webhooks_config.get('timeout', 10)
+
+    def get_slack_bot_token(self) -> str:
+        """Return the Slack bot token used for CSV file uploads (empty if unset)."""
+        webhooks_config = self._config_data.get('webhooks', {})
+        return webhooks_config.get('slack_bot_token', '')
+
+    def get_slack_channel_id(self) -> str:
+        """Return the Slack channel ID used for CSV file uploads (empty if unset)."""
+        webhooks_config = self._config_data.get('webhooks', {})
+        return webhooks_config.get('slack_channel_id', '')
 
     def is_api_update_enabled(self) -> bool:
         """
@@ -541,6 +604,18 @@ class Config:
         """Return generic address group labels mapped to configured IP/CIDR entries."""
         groups = self._config_data.get('address_groups', {})
         return groups if isinstance(groups, dict) else {}
+
+    def get_pools_file(self) -> Optional[Path]:
+        """Return the absolute path to a pools.json file, or None if disabled.
+
+        The pools file mirrors address_groups as a flat list of {cidr, label}
+        entries and is used by PoolResolver for Slack-message enrichment.
+        """
+        raw = self._config_data.get('pools_file', '')
+        if not raw:
+            return None
+        p = Path(raw)
+        return p if p.is_absolute() else (self._root_path / p)
 
     def get_rbls_file(self) -> Optional[Path]:
         """Returns the absolute path to the RBL server list file."""

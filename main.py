@@ -91,11 +91,14 @@ class MainApplication:
         self.logger.log_debug("Mail client initialized successfully")
 
         self.logger.log_debug(f"Setting up webhook client: webhook_urls={config.get_webhook_urls()}, timeout={config.get_webhook_timeout()}")
-        # Create webhook client with configured URLs and timeout.
+        # Create webhook client with configured URLs, timeout, and Slack
+        # bot credentials (used for CSV file uploads when configured).
         self.webhook_client = WebhookClient(
             webhook_urls=config.get_webhook_urls(),
             timeout=config.get_webhook_timeout(),
-            logger=self.logger
+            slack_bot_token=config.get_slack_bot_token(),
+            slack_channel_id=config.get_slack_channel_id(),
+            logger=self.logger,
         )
         self.logger.log_debug("Webhook client initialized successfully")
 
@@ -113,9 +116,20 @@ class MainApplication:
             )
             self.logger.log_debug("API client initialized successfully")
 
-        self.logger.log_debug(f"Setting up DNS block list checker with nameservers: {config.get_nameservers()}")
-        # Create DNS block list checker instance with nameservers from config.
-        self.dnsrbl_checker = RBLCheck(config.get_nameservers())
+        primary_ns = config.get_nameservers()
+        confirm_ns = config.get_nameservers_confirm()
+        self.logger.log_debug(
+            f"Setting up DNS block list checker with nameservers={primary_ns}, "
+            f"confirm={confirm_ns or 'disabled'}"
+        )
+        # Create DNS block list checker instance. Confirm nameservers, when
+        # non-empty, re-check positive listings; the logger receives DISPUTED
+        # and RBL_ERROR_CODE warnings when responses look suspicious.
+        self.dnsrbl_checker = RBLCheck(
+            nameservers=primary_ns,
+            nameservers_confirm=confirm_ns,
+            logger=self.logger,
+        )
         self.logger.log_debug("DNS block list checker initialized successfully")
 
     def _load_configuration(self):

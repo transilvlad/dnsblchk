@@ -2,7 +2,7 @@ import csv
 import ipaddress
 import sys
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from typing import Optional
 
@@ -17,17 +17,17 @@ from webhook import WebhookClient
 
 class DNSCheck:
     """
-    Handles DNS RBL and DBL checking with support for multithreading.
-    Manages check coordination, result reporting, and notifications.
+    Handles DNS RBL checking with support for multithreading.
+    Manages check coordination, result reporting, and email notifications.
     """
 
     def __init__(self, mail_client: MailClient, dnsrbl_checker: RBLCheck, logger: Logger, webhook_client: WebhookClient = None):
         """
-        Initialize the DNS block list check handler.
+        Initialize the DNS RBL Check Handler.
 
         Args:
             mail_client: MailClient instance for sending alerts.
-            dnsrbl_checker: DNS block list checker instance for RBL/DBL queries.
+            dnsrbl_checker: DNS RBL Checker instance for checking IPs.
             logger: Logger instance for logging.
             webhook_client: WebhookClient instance for sending webhook notifications (optional).
         """
@@ -35,10 +35,13 @@ class DNSCheck:
         self.mail_client = mail_client
         # Webhook client for posting notifications to external services.
         self.webhook_client = webhook_client
-        # DNS RBL/DBL Checker instance for performing block list queries.
+        # DNS RBL Checker instance for performing RBL queries.
         self.dnsrbl_checker = dnsrbl_checker
         # Domain resolver for PTR/apex target derivation used by DBL checks.
-        self.domain_resolver = DomainResolver(config.get_nameservers())
+        self.domain_resolver = DomainResolver(
+            nameservers=config.get_nameservers(),
+            nameservers_confirm=config.get_nameservers_confirm(),
+        )
         # Logger instance for recording check results and errors.
         self.logger = logger
         # Dictionary mapping IPs to list of servers they're listed on.
@@ -49,6 +52,8 @@ class DNSCheck:
         self.csv_writer = None
         # Lock for thread-safe file writing and IP recording.
         self.lock = Lock()
+        # Path to the CSV report written in the current run (None if no IPs listed yet).
+        self.current_report_path = None
 
     def check_ip_against_server(self, ip: str, server: str) -> tuple:
         """
@@ -106,22 +111,6 @@ class DNSCheck:
             self.logger.log_error(f"Error checking {domain} ({domain_source}) against {server}: {str(e)}")
             return None
 
-    def derive_domain_targets_for_ip(self, ip: str) -> tuple:
-        """
-        Derive DBL domain targets for an IP address.
-
-        Returns:
-            tuple: (ip, set of (domain, source) tuples) or an empty set on error.
-        """
-        if SignalHandler().is_shutdown_requested:
-            return (ip, set())
-
-        try:
-            return (ip, self.domain_resolver.derive_check_targets(ip))
-        except Exception as e:
-            self.logger.log_error(f"Error deriving domain targets for {ip}: {str(e)}")
-            return (ip, set())
-
     def _write_report(
         self,
         ip: str,
@@ -137,13 +126,9 @@ class DNSCheck:
         Lazily initializes the report file on first write.
 
         Args:
-            ip: The source IP address.
-            server: The DNS block list server.
+            ip: The IP address.
+            server: The DNS RBL server.
             result_details: Details about the listing.
-            check_type: RBL/DBL check type.
-            target: Actual IP/domain target queried.
-            target_source: Target origin: ip, ptr, or apex.
-            txt_context: Optional TXT response context from DBL.
         """
         # Use lock to ensure thread-safe file operations.
         with self.lock:
@@ -153,6 +138,8 @@ class DNSCheck:
                 timestamp_filename = time.strftime("%Y%m%d%H%M%S", time.gmtime())
                 # Construct full path to report file.
                 report_file_path = config.report_dir / f"report_{timestamp_filename}.csv"
+                # Store path so we can sort and reference it after the run.
+                self.current_report_path = report_file_path
                 # Open report file for writing.
                 self.report_file_handler = open(report_file_path, 'w', newline='')
                 # Create CSV writer instance.
@@ -175,7 +162,7 @@ class DNSCheck:
             if target is None:
                 target = ip
             check_type = self._report_check_type(check_type, target_source)
-            address_group = self._get_address_group(ip)
+            obm_server = self._get_address_group(ip)
             self.csv_writer.writerow([
                 timestamp,
                 ip,
@@ -183,7 +170,7 @@ class DNSCheck:
                 target,
                 target_source,
                 server,
-                address_group,
+                obm_server,
                 result_details or '',
                 txt_context or '',
             ])
@@ -197,7 +184,7 @@ class DNSCheck:
 
         Args:
             ip: The IP address.
-            server_label: The DNS block list server label.
+            server: The DNS RBL server.
         """
         # Use lock to ensure thread-safe dictionary updates.
         with self.lock:
@@ -210,11 +197,11 @@ class DNSCheck:
 
     def _process_check_result(self, result: tuple):
         """
-        Process an RBL or DBL check result.
+        Process the result of an IP check.
         Updates reports and alerts based on check outcome.
 
         Args:
-            result: RBL tuple or DBL tuple from a worker method.
+            result: Tuple containing (ip, server, is_listed, result_details).
         """
         # Skip processing if result is None (shutdown or error).
         if result is None:
@@ -267,12 +254,8 @@ class DNSCheck:
         except ValueError:
             return ''
 
-        groups = config.get_address_groups()
-        if not isinstance(groups, dict):
-            return ''
-
         matches = []
-        for label, entries in groups.items():
+        for label, entries in config.get_address_groups().items():
             if isinstance(entries, str):
                 entries = [entries]
             if not isinstance(entries, (list, tuple, set)):
@@ -286,116 +269,10 @@ class DNSCheck:
                     matches.append((network.prefixlen, str(label)))
         return max(matches, key=lambda match: (match[0], match[1]))[1] if matches else ''
 
-    @staticmethod
-    def _normalized_server_list(raw_servers):
-        """Return stripped server names from CSV rows."""
-        normalized = []
-        for row in raw_servers:
-            if not row:
-                continue
-            server = row[0].strip()
-            if server:
-                normalized.append(server)
-        return normalized
-
-    @staticmethod
-    def _normalized_ip_list(raw_ips):
-        """Return stripped IP strings from CSV rows."""
-        return [row[0].strip() for row in raw_ips if row and row[0].strip()]
-
-    def _run_serial_checks(self, rbl_servers: list, dbl_servers: list, ips: list):
-        """Run all checks sequentially."""
-        for server in rbl_servers:
-            if SignalHandler().is_shutdown_requested:
-                return
-            for ip in ips:
-                if SignalHandler().is_shutdown_requested:
-                    return
-                self._process_check_result(self.check_ip_against_server(ip, server))
-
-        if dbl_servers:
-            for ip in ips:
-                if SignalHandler().is_shutdown_requested:
-                    return
-                _, domain_targets = self.derive_domain_targets_for_ip(ip)
-                for domain, domain_source in sorted(domain_targets):
-                    if SignalHandler().is_shutdown_requested:
-                        return
-                    for server in dbl_servers:
-                        if SignalHandler().is_shutdown_requested:
-                            return
-                        self._process_check_result(
-                            self.check_domain_against_server(ip, domain, domain_source, server)
-                        )
-
-    def _run_threaded_checks(self, rbl_servers: list, dbl_servers: list, ips: list, thread_count: int):
-        """Run all checks using a thread pool."""
-        with ThreadPoolExecutor(max_workers=thread_count) as executor:
-            futures = {}
-
-            for server in rbl_servers:
-                if SignalHandler().is_shutdown_requested:
-                    break
-                for ip in ips:
-                    if SignalHandler().is_shutdown_requested:
-                        break
-                    future = executor.submit(self.check_ip_against_server, ip, server)
-                    futures[future] = ('rbl', ip, server)
-
-            if dbl_servers:
-                for ip in ips:
-                    if SignalHandler().is_shutdown_requested:
-                        break
-                    future = executor.submit(self.derive_domain_targets_for_ip, ip)
-                    futures[future] = ('derive', ip)
-
-            while futures:
-                if SignalHandler().is_shutdown_requested:
-                    break
-
-                done, _ = wait(futures, return_when=FIRST_COMPLETED)
-                for future in done:
-                    meta = futures.pop(future)
-                    try:
-                        result = future.result()
-                    except Exception as e:
-                        if meta[0] == 'rbl':
-                            _, ip, server = meta
-                            self.logger.log_error(f"Exception checking {ip} against {server}: {str(e)}")
-                        elif meta[0] == 'derive':
-                            _, ip = meta
-                            self.logger.log_error(f"Exception deriving domain targets for {ip}: {str(e)}")
-                        else:
-                            _, ip, domain, domain_source, server = meta
-                            self.logger.log_error(
-                                f"Exception checking {ip} domain target {domain} ({domain_source}) against {server}: {str(e)}"
-                            )
-                        continue
-
-                    if meta[0] == 'derive':
-                        ip, domain_targets = result
-                        for domain, domain_source in sorted(domain_targets):
-                            if SignalHandler().is_shutdown_requested:
-                                break
-                            for server in dbl_servers:
-                                if SignalHandler().is_shutdown_requested:
-                                    break
-                                dbl_future = executor.submit(
-                                    self.check_domain_against_server,
-                                    ip,
-                                    domain,
-                                    domain_source,
-                                    server,
-                                )
-                                futures[dbl_future] = ('dbl', ip, domain, domain_source, server)
-                    else:
-                        self._process_check_result(result)
-
-                    time.sleep(0.01)
-
-    def run(self, rbl_servers: list, dbl_servers: list, ips: list):
+    def run(self, rbl_servers: list, dbl_servers: list = None, ips: list = None):
         """
-        Run DNS RBL and DBL checks with multithreading support.
+        Run DNS RBL/DBL checks with multithreading support.
+        Supports both old signature run(servers, ips) and new run(rbl_servers, dbl_servers, ips).
 
         Args:
             rbl_servers: List of DNS RBL servers (each server is a list/tuple).
@@ -406,72 +283,222 @@ class DNSCheck:
         if SignalHandler().is_shutdown_requested:
             return
 
+        # Backward compatibility: run(servers, ips)
+        if ips is None:
+            ips = dbl_servers if dbl_servers is not None else []
+            dbl_servers = []
+
+        if dbl_servers is None:
+            dbl_servers = []
+
         try:
             # Reset state for this check run.
             self.listed_ips = {}
             self.report_file_handler = None
             self.csv_writer = None
+            self.current_report_path = None
 
             # Log start of check run.
             self.logger.log_info(
                 f"Checking {len(ips)} IP addresses against {len(rbl_servers)} RBL and {len(dbl_servers)} DBL servers."
             )
-            normalized_rbl_servers = self._normalized_server_list(rbl_servers)
-            normalized_dbl_servers = self._normalized_server_list(dbl_servers)
-            normalized_ips = self._normalized_ip_list(ips)
+            self.logger.log_info(f"Using {config.get_thread_count()} threads.")
 
+            def _normalized_server_list(raw_servers):
+                normalized = []
+                for row in raw_servers:
+                    if not row:
+                        continue
+                    server = row[0].strip()
+                    if not server:
+                        continue
+                    normalized.append(server)
+                return normalized
+
+            normalized_rbl_servers = _normalized_server_list(rbl_servers)
+            normalized_dbl_servers = _normalized_server_list(dbl_servers)
+            normalized_ips = [row[0].strip() for row in ips if row and row[0].strip()]
+
+            # Get configured thread count for the executor.
             thread_count = config.get_thread_count()
-            if config.is_threading_enabled():
-                self.logger.log_info(f"Using {thread_count} threads.")
-                self._run_threaded_checks(
-                    normalized_rbl_servers,
-                    normalized_dbl_servers,
-                    normalized_ips,
-                    thread_count,
-                )
-            else:
-                self.logger.log_info("Threading disabled; using sequential checks.")
-                self._run_serial_checks(normalized_rbl_servers, normalized_dbl_servers, normalized_ips)
+            # Create thread pool executor for concurrent checks.
+            with ThreadPoolExecutor(max_workers=thread_count) as executor:
+                futures = {}
 
-            # Close report file if it was opened.
+                for server in normalized_rbl_servers:
+                    if SignalHandler().is_shutdown_requested:
+                        break
+                    for ip in normalized_ips:
+                        if SignalHandler().is_shutdown_requested:
+                            break
+                        fut = executor.submit(self.check_ip_against_server, ip, server)
+                        futures[fut] = ('rbl', ip, server)
+
+                # Build DBL task groups keyed by (domain, source, server). Multiple IPs
+                # commonly share the same apex domain (e.g. all IPs in a /24 sending
+                # pool with a shared registrable apex) — group them so we issue one
+                # DNS query per unique target and fan the result back to every IP
+                # that shares it. Prevents whole-pool cascades from a single
+                # upstream DNS blip and cuts DBL query volume dramatically.
+                dbl_task_groups = {}
+                for ip in normalized_ips:
+                    if SignalHandler().is_shutdown_requested:
+                        break
+                    domain_targets = self.domain_resolver.derive_check_targets(ip)
+                    for domain, domain_source in sorted(domain_targets):
+                        for server in normalized_dbl_servers:
+                            key = (domain, domain_source, server)
+                            dbl_task_groups.setdefault(key, []).append(ip)
+
+                for (domain, domain_source, server), ips_sharing in dbl_task_groups.items():
+                    if SignalHandler().is_shutdown_requested:
+                        break
+                    representative_ip = ips_sharing[0]
+                    fut = executor.submit(
+                        self.check_domain_against_server,
+                        representative_ip,
+                        domain,
+                        domain_source,
+                        server,
+                    )
+                    futures[fut] = ('dbl', tuple(ips_sharing), domain, domain_source, server)
+
+                if len(dbl_task_groups) and normalized_dbl_servers:
+                    self.logger.log_debug(
+                        f"DBL apex dedup: {len(dbl_task_groups)} unique (target, server) "
+                        f"pairs across {len(normalized_ips)} IPs × {len(normalized_dbl_servers)} DBL servers"
+                    )
+
+                # Process results as they complete.
+                for future in as_completed(futures):
+                    # Exit early if shutdown requested during result processing.
+                    if SignalHandler().is_shutdown_requested:
+                        break
+
+                    meta = futures[future]
+                    try:
+                        result = future.result()
+                    except Exception as e:
+                        if meta[0] == 'rbl':
+                            _, ip, server = meta
+                            self.logger.log_error(f"Exception checking {ip} against {server}: {str(e)}")
+                        else:
+                            _, ips_sharing, domain, domain_source, server = meta
+                            self.logger.log_error(
+                                f"Exception checking {len(ips_sharing)} IPs domain target "
+                                f"{domain} ({domain_source}) against {server}: {str(e)}"
+                            )
+                        time.sleep(0.01)
+                        continue
+
+                    if result is None:
+                        time.sleep(0.01)
+                        continue
+
+                    if meta[0] == 'rbl':
+                        self._process_check_result(result)
+                    else:
+                        # Fan the single (target, server) result out to every IP that
+                        # shares the target. Each IP produces its own CSV row and
+                        # listed_ips entry so downstream reporting is unchanged.
+                        _, ips_sharing, domain, domain_source, server = meta
+                        (_rep_ip, r_target, r_target_source, r_server,
+                         is_listed, response_code, txt_context) = result
+                        for ip in ips_sharing:
+                            fanned = (
+                                ip, r_target, r_target_source, r_server,
+                                is_listed, response_code, txt_context,
+                            )
+                            self._process_check_result(fanned)
+
+                    # Small delay between processing results to avoid overwhelming the system.
+                    time.sleep(0.01)
+
+            # Close report file if it was opened, then sort it by IP for consistent output.
             if self.report_file_handler:
                 self.report_file_handler.close()
+                if self.current_report_path:
+                    self._sort_report_file(self.current_report_path)
 
             # Log summary of check run.
             self.logger.log_info(f"Found {len(self.listed_ips)} listed IP addresses.")
 
-            # Send notifications if IPs were found.
-            if self.listed_ips:
-                self.logger.log_debug(f"Listed IPs detected: {list(self.listed_ips.keys())}")
+            # Load previous run's CSV for delta comparison (existing local logs seed history).
+            previous_results = self._load_previous_results(self.current_report_path)
 
-                # Filter out suppressed IPs from notifications.
-                suppressed = config.get_active_suppressions()
-                notification_ips = {ip: servers for ip, servers in self.listed_ips.items() if ip not in suppressed}
-                for ip in self.listed_ips:
+            # DBL persistence gate: a DBL sighting must appear in two consecutive
+            # runs (or the previous CSV) before it becomes alertable. Suppresses
+            # transient upstream DNS anomalies where a single bad response for a
+            # shared apex flips an entire /24 pool for one run. See
+            # docs/incidents/obm-oxygen-dbl-false-positive-2026-08-07.md.
+            previous_pairs = self._flatten_previous_pairs(previous_results)
+            pending_pairs = self._load_pending_pairs()
+            alertable_listed_ips, new_pending_pairs = self._apply_persistence_gate(
+                self.listed_ips, previous_pairs, pending_pairs
+            )
+            self._save_pending_pairs(new_pending_pairs)
+
+            # Pool-flood detection: log a WARNING if a large share of a pool is
+            # about to alert on a single DBL server via a single apex. Alerts
+            # still fire (real listings can be pool-wide) but the log flags the
+            # pattern operators should double-check before rotating IPs.
+            self._log_pool_flood_warnings(alertable_listed_ips)
+
+            newly_listed, still_listed, delisted = self._categorize_results(
+                alertable_listed_ips, previous_results
+            )
+            self.logger.log_debug(
+                f"Delta: {len(newly_listed)} newly listed, "
+                f"{len(still_listed)} still listed, "
+                f"{len(delisted)} delisted"
+            )
+
+            # Filter suppressions from actively-listed categories (not from delisted).
+            suppressed = config.get_active_suppressions()
+
+            def _filter_suppressed(d):
+                out = {}
+                for ip, s in d.items():
                     if ip in suppressed:
                         self.logger.log_info(f"SUPPRESSED: {ip} is listed but notifications are suppressed")
-
-                if notification_ips:
-                    # Send email notification if email is enabled.
-                    if config.is_email_enabled():
-                        self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
-                        self._send_email_report(notification_ips)
                     else:
-                        self.logger.log_debug("Email notifications disabled in configuration")
+                        out[ip] = s
+                return out
 
-                    # Send webhook notification if webhooks are enabled (independent of email).
-                    if config.is_webhooks_enabled():
-                        self.logger.log_debug("Webhooks are enabled, proceeding with webhook notification")
-                        self._send_webhook_notification(notification_ips)
-                    else:
-                        self.logger.log_debug("Webhooks are disabled in configuration")
+            notif_newly    = _filter_suppressed(newly_listed)
+            notif_still    = _filter_suppressed(still_listed)
+            notif_delisted = {ip: s for ip, s in delisted.items() if ip not in suppressed}
+
+            should_notify = bool(notif_newly or notif_still or notif_delisted)
+
+            if should_notify:
+                from pools import PoolResolver
+                pool_resolver = PoolResolver(config.get_pools_file(), logger=self.logger)
+
+                if config.is_email_enabled():
+                    self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
+                    email_ips = {**notif_newly, **notif_still}
+                    if email_ips:
+                        self._send_email_report(email_ips)
                 else:
-                    self.logger.log_debug("All listed IPs are suppressed, skipping notifications")
+                    self.logger.log_debug("Email notifications disabled in configuration")
 
-                # Cleanup old reports after notifications
-                self._cleanup_old_reports()
+                if config.is_webhooks_enabled():
+                    self.logger.log_debug("Webhooks are enabled, proceeding with categorized notifications")
+                    self._send_categorized_notifications(
+                        newly=notif_newly,
+                        still=notif_still,
+                        delisted=notif_delisted,
+                        pool_resolver=pool_resolver,
+                        report_path=self.current_report_path,
+                    )
+                else:
+                    self.logger.log_debug("Webhooks are disabled in configuration")
             else:
-                self.logger.log_debug("No listed IPs found, skipping email and webhook notifications")
+                self.logger.log_debug("No changes detected, skipping notifications")
+
+            # Cleanup old reports after notifications.
+            self._cleanup_old_reports()
 
         except Exception:
             # Capture exception information for logging.
@@ -498,7 +525,7 @@ class DNSCheck:
         self.logger.log_debug(f"Preparing to send email report for {len(ips)} listed IP(s)")
 
         # Build email message with header.
-        mail_text = "The following IP addresses or derived domains were found on one or more DNS block lists:\n\n"
+        mail_text = "The following IP addresses were found on one or more DNS RBLs:\n\n"
         # Add each listed IP with servers it appears on.
         for ip, servers in ips.items():
             mail_text += f"{ip} ===> {', '.join(servers)}\n"
@@ -513,7 +540,7 @@ class DNSCheck:
             success, error = self.mail_client.send_plain(
                 to_email=recipient,
                 from_email=config.get_email_sender(),
-                subject="DNS Block List Alert",
+                subject="DNS RBL Alert",
                 message=mail_text
             )
             # Log any email sending errors.
@@ -522,35 +549,77 @@ class DNSCheck:
             else:
                 self.logger.log_info(f"Email report sent successfully to {recipient}")
 
-    def _send_webhook_notification(self, ips: dict = None):
-        """
-        Send webhook notification for listed IP addresses.
-        Posts JSON data to all configured webhook URLs.
 
-        Args:
-            ips: Dictionary of IPs to include in the notification. Defaults to self.listed_ips.
-        """
-        # Check if webhook client is available.
-        if not self.webhook_client:
-            self.logger.log_warning("Webhook client not available, skipping webhook notification")
+    @staticmethod
+    def _sort_ips(ip_dict: dict) -> list:
+        """Return ip_dict items sorted numerically by IP address."""
+        import ipaddress as _ip
+
+        def _key(item):
+            try:
+                return _ip.ip_address(item[0])
+            except ValueError:
+                return _ip.ip_address('0.0.0.0')
+
+        return sorted(ip_dict.items(), key=_key)
+
+    def _sort_report_file(self, report_path):
+        """Sort report sections and add blank separators between check types."""
+        import ipaddress as _ip
+        import csv as _csv
+        from pathlib import Path as _Path
+        p = _Path(report_path)
+        if not p.exists():
             return
+        try:
+            with open(p, newline='') as f:
+                rows = list(_csv.reader(f))
 
-        if ips is None:
-            ips = self.listed_ips
+            if not rows:
+                return
 
-        self.logger.log_debug(f"_send_webhook_notification called for {len(ips)} listed IP(s)")
+            has_header = rows[0] and rows[0][0] == "timestamp"
+            header = rows[0] if has_header else None
+            data_rows = rows[1:] if has_header else rows
 
-        # Prepare structured data for webhook payload.
-        webhook_data = {
-            "ips": ips,
-            "count": len(ips)
-        }
-        # Send notification and log result
-        success, errors = self.webhook_client.send_notification(webhook_data)
-        if success:
-            self.logger.log_info(f"Webhook notification sent successfully for {len(self.listed_ips)} listed IP(s)")
-        else:
-            self.logger.log_warning(f"Webhook notification failed with errors: {errors}")
+            check_type_order = {'IP': 0, 'PTR': 1, 'APEX': 2}
+
+            def _key(row):
+                try:
+                    source_ip = _ip.ip_address(row[1].strip())
+                except (ValueError, IndexError):
+                    source_ip = _ip.ip_address('0.0.0.0')
+                check_type = self._report_check_type(
+                    row[2].strip() if len(row) > 2 else '',
+                    row[4].strip() if len(row) > 4 else '',
+                )
+                target = row[3].strip() if len(row) > 3 else ''
+                server = row[5].strip() if len(row) > 5 else (row[2].strip() if len(row) > 2 else '')
+                return (check_type_order.get(check_type, 99), source_ip, target, server)
+
+            for row in data_rows:
+                if len(row) > 2:
+                    row[2] = self._report_check_type(
+                        row[2].strip(),
+                        row[4].strip() if len(row) > 4 else '',
+                    )
+            data_rows.sort(key=_key)
+            spaced_rows = []
+            previous_type = None
+            for row in data_rows:
+                current_type = row[2] if len(row) > 2 else ''
+                if spaced_rows and current_type != previous_type:
+                    spaced_rows.append([])
+                spaced_rows.append(row)
+                previous_type = current_type
+
+            with open(p, 'w', newline='') as f:
+                writer = _csv.writer(f)
+                if header:
+                    writer.writerow(header)
+                writer.writerows(spaced_rows)
+        except Exception as e:
+            self.logger.log_error(f"_sort_report_file failed: {e}")
 
     @staticmethod
     def _report_check_type(check_type: str, target_source: str = '') -> str:
@@ -565,15 +634,300 @@ class DNSCheck:
             return 'PTR' if source == 'ptr' else 'APEX' if source == 'apex' else 'DBL'
         return normalized
 
+    def _load_previous_results(self, current_report_path=None) -> dict:
+        """Load the most recent previous CSV report into a {ip: set(servers)} dict.
+
+        Excludes current_report_path so we always read the prior run, not this one.
+        Existing local log files seed history immediately on first deployment.
+        """
+        from pathlib import Path as _Path
+        import csv as _csv
+        try:
+            report_dir = _Path(config.report_dir)
+            files = sorted(
+                report_dir.glob('report_*.csv'),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True
+            )
+            if current_report_path:
+                files = [f for f in files if f != _Path(current_report_path)]
+            if not files:
+                self.logger.log_debug("_load_previous_results: no previous report found")
+                return {}
+            results = {}
+            with open(files[0], newline='') as f:
+                for row in _csv.reader(f):
+                    if not row:
+                        continue
+                    if row[0] == "timestamp":
+                        continue
+                    if len(row) >= 6:
+                        ip, server = row[1].strip(), row[5].strip()
+                    elif len(row) >= 3:
+                        ip, server = row[1].strip(), row[2].strip()
+                    else:
+                        continue
+                    if ip and server:
+                        results.setdefault(ip, set()).add(server)
+            self.logger.log_debug(
+                f"_load_previous_results: {len(results)} IPs from {files[0].name}"
+            )
+            return results
+        except Exception as e:
+            self.logger.log_error(f"_load_previous_results failed: {e}")
+            return {}
+
+    def _categorize_results(self, current: dict, previous: dict):
+        """Categorize current results against previous run.
+
+        Returns (newly_listed, still_listed, delisted) — each a {ip: servers} dict.
+        """
+        newly    = {ip: s for ip, s in current.items() if ip not in previous}
+        still    = {ip: s for ip, s in current.items() if ip in previous}
+        delisted = {ip: sorted(s) for ip, s in previous.items() if ip not in current}
+        return newly, still, delisted
+
+    # ------------------------------------------------------------------
+    # DBL persistence gate (see docs/incidents/obm-oxygen-dbl-false-positive-2026-08-07.md)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_dbl_label(server_label: str) -> bool:
+        """Server labels formatted as 'server [source:target]' are DBL sightings."""
+        return isinstance(server_label, str) and ' [' in server_label and server_label.endswith(']')
+
+    @staticmethod
+    def _dbl_server_from_label(server_label: str) -> str:
+        """Return the DBL server hostname from a 'server [source:target]' label."""
+        return server_label.split(' ', 1)[0]
+
+    def _pending_file_path(self):
+        from pathlib import Path as _Path
+        return _Path(config.report_dir) / 'dbl_pending.json'
+
+    def _load_pending_pairs(self) -> set:
+        """Load previously-recorded first-sighting DBL (ip, server) pairs."""
+        import json as _json
+        path = self._pending_file_path()
+        try:
+            if not path.exists():
+                return set()
+            with open(path) as f:
+                data = _json.load(f)
+            pairs = data.get('pairs', []) if isinstance(data, dict) else []
+            out = set()
+            for entry in pairs:
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    ip, server = str(entry[0]), str(entry[1])
+                    if ip and server:
+                        out.add((ip, server))
+            self.logger.log_debug(f"_load_pending_pairs: {len(out)} pending DBL sightings from {path.name}")
+            return out
+        except Exception as e:
+            self.logger.log_error(f"_load_pending_pairs failed: {e}")
+            return set()
+
+    def _save_pending_pairs(self, pairs: set):
+        """Persist current run's first-sighting DBL (ip, server) pairs."""
+        import json as _json
+        path = self._pending_file_path()
+        try:
+            payload = {'pairs': sorted([list(p) for p in pairs])}
+            with open(path, 'w') as f:
+                _json.dump(payload, f, indent=2)
+            self.logger.log_debug(f"_save_pending_pairs: wrote {len(pairs)} pending sightings to {path.name}")
+        except Exception as e:
+            self.logger.log_error(f"_save_pending_pairs failed: {e}")
+
+    @staticmethod
+    def _flatten_previous_pairs(previous_results: dict) -> set:
+        """Convert {ip: set(servers)} into a set of (ip, server) tuples."""
+        pairs = set()
+        for ip, servers in previous_results.items():
+            if isinstance(servers, (list, set, tuple)):
+                for s in servers:
+                    pairs.add((ip, s))
+            elif isinstance(servers, str):
+                pairs.add((ip, servers))
+        return pairs
+
+    def _apply_persistence_gate(self, listed_ips: dict, previous_pairs: set, pending_pairs: set):
+        """Filter DBL sightings that have not yet appeared in two consecutive runs.
+
+        RBL (IP-based) sightings pass through unchanged — they don't cascade via
+        shared identifiers.
+
+        A DBL sighting is alertable when its (ip, dbl_server) pair either:
+          * appeared in the previous run's CSV, or
+          * appeared in the pending file (previous run's first sightings).
+
+        First-time DBL sightings are recorded in the returned `new_pending`
+        set and stripped from the alertable dict. CSV rows are unaffected —
+        the full audit trail is preserved.
+
+        Returns:
+            (alertable_listed_ips, new_pending_pairs)
+        """
+        require_runs = config.get_require_consecutive_runs()
+        if require_runs <= 1:
+            return dict(listed_ips), set()
+
+        alertable = {}
+        new_pending = set()
+        held_count = 0
+        for ip, labels in listed_ips.items():
+            if not isinstance(labels, (list, tuple, set)):
+                alertable[ip] = labels
+                continue
+            kept = []
+            for label in labels:
+                if not self._is_dbl_label(label):
+                    kept.append(label)
+                    continue
+                dbl_server = self._dbl_server_from_label(label)
+                key = (ip, dbl_server)
+                if key in previous_pairs or key in pending_pairs:
+                    kept.append(label)
+                else:
+                    new_pending.add(key)
+                    held_count += 1
+                    self.logger.log_info(
+                        f"PENDING: {ip} DBL sighting via {label} — first sighting, holding for next run"
+                    )
+            if kept:
+                alertable[ip] = kept
+
+        if held_count:
+            self.logger.log_info(
+                f"Persistence gate: held {held_count} first-sighting DBL entries "
+                f"(require_consecutive_runs={require_runs})"
+            )
+        return alertable, new_pending
+
+    def _log_pool_flood_warnings(self, alertable_listed_ips: dict):
+        """Emit WARNING when a pool-wide DBL cascade is about to alert.
+
+        Groups alertable DBL sightings by (pool_label, dbl_server, apex). If any
+        group exceeds `pool_flood_threshold`, log a warning naming the shared
+        apex — this is the fingerprint of a transient upstream DNS anomaly.
+        Alerts still fire; the warning is guidance for the operator reading
+        Slack.
+        """
+        threshold = config.get_pool_flood_threshold()
+        if threshold <= 0 or not alertable_listed_ips:
+            return
+
+        from collections import defaultdict
+        groups = defaultdict(list)  # (pool, dbl_server, apex) -> [ip, ...]
+        for ip, labels in alertable_listed_ips.items():
+            if not isinstance(labels, (list, tuple, set)):
+                continue
+            pool = self._get_address_group(ip) or '(unlabeled)'
+            for label in labels:
+                if not self._is_dbl_label(label):
+                    continue
+                dbl_server = self._dbl_server_from_label(label)
+                meta = label.rsplit(' [', 1)[1][:-1]  # 'source:target'
+                if ':' not in meta:
+                    continue
+                source, target = meta.split(':', 1)
+                if source != 'apex':
+                    continue
+                groups[(pool, dbl_server, target)].append(ip)
+
+        for (pool, dbl_server, apex), ips in groups.items():
+            if len(ips) >= threshold:
+                self.logger.log_warning(
+                    f"POOL_FLOOD: {len(ips)} IPs of pool '{pool}' listed on {dbl_server} "
+                    f"via shared apex '{apex}' — consistent with a transient DNS anomaly. "
+                    f"Verify against a second resolver before rotating IPs."
+                )
+
+    def _send_categorized_notifications(self, newly, still, delisted, pool_resolver=None, report_path=None):
+        """Send one Slack summary message, then upload the CSV as a file."""
+        if not self.webhook_client:
+            self.logger.log_warning("Webhook client not available, skipping notifications")
+            return
+
+        def _classify_entries(entries: dict):
+            ip_items = set()
+            domain_items = set()
+            for ip, server_labels in entries.items():
+                labels = server_labels if isinstance(server_labels, (list, set, tuple)) else [server_labels]
+                has_rbl = False
+                for label in labels:
+                    if not isinstance(label, str):
+                        continue
+                    if " [" in label and label.endswith("]"):
+                        meta = label.rsplit(" [", 1)[1][:-1]  # ptr:example.com / apex:example.com
+                        if ":" in meta:
+                            _, domain = meta.split(":", 1)
+                            if domain:
+                                domain_items.add(domain)
+                    else:
+                        has_rbl = True
+                if has_rbl:
+                    ip_items.add(ip)
+            return sorted(ip_items), sorted(domain_items)
+
+        current_active = {}
+        current_active.update(still)
+        current_active.update(newly)
+
+        total_ips, total_domains = _classify_entries(current_active)
+        new_ips, new_domains = _classify_entries(newly)
+        delisted_ips, delisted_domains = _classify_entries(delisted)
+        affected_servers = {}
+        for ip in current_active:
+            label = self._get_address_group(ip)
+            if label:
+                affected_servers[label] = affected_servers.get(label, 0) + 1
+        ordered_affected_servers = [
+            {"server": label, "listed_ips": count}
+            for label, count in sorted(
+                affected_servers.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ]
+
+        summary_data = {
+            "summary": {
+                "total_listed_ips": len(total_ips),
+                "total_listed_domains": len(total_domains),
+                "newly_listed_ips": new_ips,
+                "newly_listed_domains": new_domains,
+                "delisted_ips": delisted_ips,
+                "delisted_domains": delisted_domains,
+                "affected_servers": ordered_affected_servers,
+            }
+        }
+
+        ok, errors = self.webhook_client.send_notification(summary_data, pool_resolver=pool_resolver)
+        if ok:
+            self.logger.log_info(
+                f"Slack summary sent (ips={len(total_ips)}, domains={len(total_domains)}, "
+                f"new_ips={len(new_ips)}, new_domains={len(new_domains)}, "
+                f"delisted_ips={len(delisted_ips)}, delisted_domains={len(delisted_domains)})"
+            )
+        else:
+            self.logger.log_warning(f"Slack summary notification failed: {errors}")
+
+        # Upload the full sorted CSV as a Slack file (best-effort, non-fatal).
+        if report_path:
+            ok, err = self.webhook_client.upload_csv_to_slack(report_path)
+            if not ok:
+                self.logger.log_warning(f"CSV Slack upload failed (non-fatal): {err}")
+
     def _cleanup_old_reports(self):
         """
         Keeps only the last N report files in the report directory, deleting older ones.
         """
+        from pathlib import Path
         report_dir = config.report_dir
         keep_n = config.get_keep_last_reports()
         if not report_dir or not keep_n:
             return
-        report_dir = report_dir
+        report_dir = Path(report_dir)
         if not report_dir.exists():
             return
         # List all report_*.csv files, sort by mtime descending

@@ -19,6 +19,10 @@ nameservers:
   - "208.67.222.222"
   - "208.67.220.220"
 
+nameservers_confirm: []
+require_consecutive_runs: 2
+pool_flood_threshold: 20
+
 threading:
   enabled: true
   thread_count: 10
@@ -39,6 +43,8 @@ webhooks:
   enabled: false
   urls: []
   timeout: 10
+  slack_bot_token: ""
+  slack_channel_id: ""
 
 api_update:
   enabled: false
@@ -48,6 +54,9 @@ api_update:
   password: ""
   bearer_token: ""
   timeout: 10
+
+pools_file: ""
+suppressions: []
 
 logging:
   level: "INFO"

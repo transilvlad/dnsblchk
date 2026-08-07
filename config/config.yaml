@@ -23,6 +23,28 @@ nameservers:
   - "208.67.222.222"  # OpenDNS nameserver.
   - "208.67.220.220"  # OpenDNS nameserver (secondary).
 
+# Confirmation nameservers (optional). When set, any positive listing seen via
+# the primary nameservers above is re-queried through these resolvers, and
+# only reported if they agree. Suppresses false positives from transient
+# upstream DNS anomalies (a public resolver briefly returning a bogus DBL
+# code, for example). Leave empty to disable.
+nameservers_confirm: []
+#  - "8.8.8.8"
+#  - "8.8.4.4"
+
+# DBL persistence gate: require a DBL sighting to appear in this many
+# consecutive runs before it counts as an alertable listing. 1 = legacy
+# single-run alerting. 2 = require a listing to persist across one run
+# boundary (~sleep_hours). Applies to DBL (domain-based) checks only; RBL
+# sightings always alert on first sighting.
+require_consecutive_runs: 2
+
+# Pool-flood warning threshold: when this many IPs of a single pool are
+# newly listed on a single DBL server via the same registrable apex, log a
+# WARNING flagging the pattern as a likely transient DNS anomaly. Alerts
+# still fire; the warning is guidance for the operator. Set to 0 to disable.
+pool_flood_threshold: 20
+
 # Threading settings.
 threading:
   enabled: true    # Enable multithreading for DNS block list checks (default: true).
@@ -49,6 +71,11 @@ webhooks:
   # List of webhook URLs to post notifications to (e.g., ["https://example.com/webhook"]).
   urls: []
   timeout: 10    # Timeout in seconds for webhook requests (default: 10).
+  # Slack bot credentials — optional. When both are set, run reports are
+  # uploaded as CSV files to Slack alongside the webhook summary message.
+  # Requires a bot token with `files:write` and access to the channel.
+  slack_bot_token: ""
+  slack_channel_id: ""
 
 # API-based IP update.
 api_update:
@@ -60,6 +87,19 @@ api_update:
   password: ""         # Password for basic authentication (required if auth_type is 'basic').
   bearer_token: ""     # Bearer token for bearer authentication (required if auth_type is 'bearer').
   timeout: 10          # Timeout in seconds for API requests (default: 10).
+
+# Optional pool label file. If set, PoolResolver reads {cidr, label} entries
+# from this JSON file to enrich Slack messages with per-IP pool labels.
+# Redundant when address_groups above already covers your CIDRs — leave
+# empty to disable.
+pools_file: ""
+
+# Alert suppressions — mute notifications for specific IPs until a date.
+# IPs are still checked and logged, but excluded from webhook/email alerts.
+suppressions: []
+#  - ip: "192.0.2.10"
+#    until: "2026-12-31"
+#    reason: "known false positive, delisting requested"
 
 # Logging settings.
 logging:

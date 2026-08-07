@@ -83,6 +83,9 @@ class TestMainApplication:
             mock_config.get_api_update_bearer_token.return_value = "token"
             mock_config.get_api_update_timeout.return_value = 5
             mock_config.get_nameservers.return_value = ["208.67.222.222"]
+            mock_config.get_nameservers_confirm.return_value = []
+            mock_config.get_slack_bot_token.return_value = ""
+            mock_config.get_slack_channel_id.return_value = ""
 
             app = app_main.MainApplication()
             app.logger = logger
@@ -91,7 +94,11 @@ class TestMainApplication:
         mock_mail.assert_called_once()
         mock_webhook.assert_called_once()
         mock_api.assert_called_once()
-        mock_rbl.assert_called_once_with(["208.67.222.222"])
+        mock_rbl.assert_called_once_with(
+            nameservers=["208.67.222.222"],
+            nameservers_confirm=[],
+            logger=logger,
+        )
         assert app.api_client == mock_api.return_value
 
     def test_load_configuration_handles_missing_dbl_file(self, tmp_path):
