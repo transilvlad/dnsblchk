@@ -15,6 +15,67 @@ from signals import SignalHandler
 from webhook import WebhookClient
 
 
+def _as_labels(value) -> list:
+    """Normalize a listed-IP value into a list of server labels."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return [value]
+
+
+def _is_dbl_label(server_label) -> bool:
+    """Server labels formatted as 'server [source:target]' are DBL sightings."""
+    return (
+        isinstance(server_label, str)
+        and ' [' in server_label
+        and server_label.endswith(']')
+    )
+
+
+def _label_domain(server_label: str) -> str:
+    """Return the domain a DBL label was raised for, or '' for RBL labels."""
+    if not _is_dbl_label(server_label):
+        return ''
+    meta = server_label.rsplit(' [', 1)[1][:-1]  # 'ptr:example.com'
+    if ':' not in meta:
+        return ''
+    return meta.split(':', 1)[1]
+
+
+def classify_entities(entries: dict):
+    """Split a {ip: [server_label]} mapping into the two populations we report.
+
+    Returns (ip_entities, domain_entities, dbl_affected_ips):
+      * ip_entities        - IPs carrying at least one RBL (IP-based) listing.
+                             These are the "N IPs listed" headline.
+      * domain_entities    - distinct domains listed on a DBL. These are the
+                             "N domains listed" headline.
+      * dbl_affected_ips   - IPs whose PTR/apex resolves to a listed domain.
+                             Reported as context, never mixed into ip_entities.
+
+    Keeping these three sets separate is the whole point: an IP can appear in
+    dbl_affected_ips without ever being in ip_entities, and counting a change
+    in one population against a total taken from the other is what produced
+    the "13 delisted, still 153 listed" report.
+    """
+    ip_entities = set()
+    domain_entities = set()
+    dbl_affected_ips = set()
+    for ip, server_labels in entries.items():
+        for label in _as_labels(server_labels):
+            if not isinstance(label, str):
+                continue
+            if _is_dbl_label(label):
+                domain = _label_domain(label)
+                if domain:
+                    domain_entities.add(domain)
+                    dbl_affected_ips.add(ip)
+            else:
+                ip_entities.add(ip)
+    return ip_entities, domain_entities, dbl_affected_ips
+
+
 class DNSCheck:
     """
     Handles DNS RBL checking with support for multithreading.
@@ -444,8 +505,13 @@ class DNSCheck:
             # pattern operators should double-check before rotating IPs.
             self._log_pool_flood_warnings(alertable_listed_ips)
 
+            # Compare against what the previous run actually *alerted on*, not
+            # the raw previous CSV — the CSV also contains DBL sightings that
+            # run was still holding behind the persistence gate.
+            previous_alerted = self._strip_held_sightings(previous_results, pending_pairs)
+
             newly_listed, still_listed, delisted = self._categorize_results(
-                alertable_listed_ips, previous_results
+                alertable_listed_ips, previous_alerted
             )
             self.logger.log_debug(
                 f"Delta: {len(newly_listed)} newly listed, "
@@ -468,6 +534,11 @@ class DNSCheck:
             notif_newly    = _filter_suppressed(newly_listed)
             notif_still    = _filter_suppressed(still_listed)
             notif_delisted = {ip: s for ip, s in delisted.items() if ip not in suppressed}
+            # The previous-run baseline must be filtered the same way, or the
+            # summary arithmetic (previous + new - delisted = total) breaks.
+            notif_previous = {
+                ip: s for ip, s in previous_alerted.items() if ip not in suppressed
+            }
 
             should_notify = bool(notif_newly or notif_still or notif_delisted)
 
@@ -477,7 +548,7 @@ class DNSCheck:
 
                 if config.is_email_enabled():
                     self.logger.log_debug("Email notifications enabled, proceeding with email alerts")
-                    email_ips = {**notif_newly, **notif_still}
+                    email_ips = self._merge_label_maps(notif_newly, notif_still)
                     if email_ips:
                         self._send_email_report(email_ips)
                 else:
@@ -489,6 +560,7 @@ class DNSCheck:
                         newly=notif_newly,
                         still=notif_still,
                         delisted=notif_delisted,
+                        previous=notif_previous,
                         pool_resolver=pool_resolver,
                         report_path=self.current_report_path,
                     )
@@ -635,10 +707,24 @@ class DNSCheck:
         return normalized
 
     def _load_previous_results(self, current_report_path=None) -> dict:
-        """Load the most recent previous CSV report into a {ip: set(servers)} dict.
+        """Load the most recent previous CSV report into a {ip: [server_label]} dict.
 
         Excludes current_report_path so we always read the prior run, not this one.
         Existing local log files seed history immediately on first deployment.
+
+        The labels rebuilt here are identical to the ones
+        `_process_check_result` feeds to `_record_listed_ip`:
+
+            RBL sighting  ->  'zen.spamhaus.org'
+            DBL sighting  ->  'dbl.spamhaus.org [apex:example.com]'
+
+        Reconstructing the bracketed suffix is what makes the previous run
+        comparable to the current one. Reading only the bare `server` column
+        (as this used to) collapsed every DBL sighting into something that
+        looks like an RBL listing, so a domain coming off a DBL was reported
+        as a *delisted IP* while the IP total — counted from the properly
+        labelled current run — never moved. That is the "13 delisted but
+        still 153 listed" contradiction.
         """
         from pathlib import Path as _Path
         import csv as _csv
@@ -654,21 +740,41 @@ class DNSCheck:
             if not files:
                 self.logger.log_debug("_load_previous_results: no previous report found")
                 return {}
-            results = {}
             with open(files[0], newline='') as f:
-                for row in _csv.reader(f):
-                    if not row:
-                        continue
-                    if row[0] == "timestamp":
-                        continue
-                    if len(row) >= 6:
-                        ip, server = row[1].strip(), row[5].strip()
-                    elif len(row) >= 3:
-                        ip, server = row[1].strip(), row[2].strip()
-                    else:
-                        continue
-                    if ip and server:
-                        results.setdefault(ip, set()).add(server)
+                rows = list(_csv.reader(f))
+
+            # Resolve columns by header name; fall back to the historical
+            # positional layout for reports written by older versions.
+            cols = {}
+            data_rows = rows
+            if rows and rows[0] and rows[0][0] == "timestamp":
+                cols = {name: idx for idx, name in enumerate(rows[0])}
+                data_rows = rows[1:]
+
+            def _cell(row, name, fallback_idx):
+                idx = cols.get(name, fallback_idx)
+                if idx is None or idx >= len(row):
+                    return ''
+                return row[idx].strip()
+
+            results = {}
+            for row in data_rows:
+                if not row or row[0] == "timestamp":
+                    continue
+                wide = len(row) >= 6
+                ip = _cell(row, 'source_ip', 1)
+                server = _cell(row, 'server', 5 if wide else 2)
+                if not ip or not server:
+                    continue
+                label = self._rebuild_server_label(
+                    _cell(row, 'check_type', 2 if wide else None),
+                    _cell(row, 'target', 3 if wide else None),
+                    _cell(row, 'target_source', 4 if wide else None),
+                    server,
+                )
+                bucket = results.setdefault(ip, [])
+                if label not in bucket:
+                    bucket.append(label)
             self.logger.log_debug(
                 f"_load_previous_results: {len(results)} IPs from {files[0].name}"
             )
@@ -677,14 +783,46 @@ class DNSCheck:
             self.logger.log_error(f"_load_previous_results failed: {e}")
             return {}
 
+    @staticmethod
+    def _rebuild_server_label(check_type: str, target: str, target_source: str, server: str) -> str:
+        """Rebuild the in-memory server label from a CSV report row.
+
+        Mirrors `_process_check_result`: RBL rows keep the bare server name,
+        DBL rows regain their ' [source:target]' suffix.
+        """
+        normalized = (check_type or '').strip().upper()
+        source = (target_source or '').strip().lower()
+        is_dbl = normalized in ('PTR', 'APEX', 'DBL') or source in ('ptr', 'apex')
+        if not is_dbl or not target:
+            return server
+        if not source:
+            source = normalized.lower() if normalized != 'DBL' else 'apex'
+        return f"{server} [{source}:{target}]"
+
     def _categorize_results(self, current: dict, previous: dict):
         """Categorize current results against previous run.
 
-        Returns (newly_listed, still_listed, delisted) — each a {ip: servers} dict.
+        Compares at (ip, server_label) granularity rather than by IP alone, so
+        an IP that loses one listing while keeping another is reported as a
+        partial change instead of silently staying in "still listed".
+
+        Returns (newly_listed, still_listed, delisted) — each a
+        {ip: [server_label]} dict holding only the labels in that category.
         """
-        newly    = {ip: s for ip, s in current.items() if ip not in previous}
-        still    = {ip: s for ip, s in current.items() if ip in previous}
-        delisted = {ip: sorted(s) for ip, s in previous.items() if ip not in current}
+        newly, still, delisted = {}, {}, {}
+
+        for ip, value in current.items():
+            prev_labels = set(_as_labels(previous.get(ip, [])))
+            for label in _as_labels(value):
+                bucket = still if label in prev_labels else newly
+                bucket.setdefault(ip, []).append(label)
+
+        for ip, value in previous.items():
+            cur_labels = set(_as_labels(current.get(ip, [])))
+            gone = [label for label in _as_labels(value) if label not in cur_labels]
+            if gone:
+                delisted[ip] = sorted(gone)
+
         return newly, still, delisted
 
     # ------------------------------------------------------------------
@@ -694,7 +832,7 @@ class DNSCheck:
     @staticmethod
     def _is_dbl_label(server_label: str) -> bool:
         """Server labels formatted as 'server [source:target]' are DBL sightings."""
-        return isinstance(server_label, str) and ' [' in server_label and server_label.endswith(']')
+        return _is_dbl_label(server_label)
 
     @staticmethod
     def _dbl_server_from_label(server_label: str) -> str:
@@ -741,15 +879,48 @@ class DNSCheck:
 
     @staticmethod
     def _flatten_previous_pairs(previous_results: dict) -> set:
-        """Convert {ip: set(servers)} into a set of (ip, server) tuples."""
+        """Convert {ip: [server_label]} into a set of (ip, bare_server) tuples.
+
+        The persistence gate keys on the bare server hostname, so DBL labels
+        are stripped of their ' [source:target]' suffix here. RBL labels pass
+        through unchanged.
+        """
         pairs = set()
-        for ip, servers in previous_results.items():
-            if isinstance(servers, (list, set, tuple)):
-                for s in servers:
-                    pairs.add((ip, s))
-            elif isinstance(servers, str):
-                pairs.add((ip, servers))
+        for ip, labels in previous_results.items():
+            for label in _as_labels(labels):
+                if not isinstance(label, str):
+                    continue
+                pairs.add((ip, DNSCheck._dbl_server_from_label(label)))
         return pairs
+
+    @staticmethod
+    def _strip_held_sightings(previous_results: dict, pending_pairs: set) -> dict:
+        """Return the subset of the previous run that actually alerted.
+
+        `pending_pairs` is the set of first-sighting DBL pairs the *previous*
+        run held back behind the persistence gate. Those rows are in the
+        previous CSV (the audit trail is complete by design) but they were
+        never announced. Comparing against the raw CSV therefore reports them
+        as delisted on the next run — a phantom delisting for something that
+        was never said to be listed. Dropping them here makes the delta
+        previous-alerted vs current-alerted, which is what the Slack summary
+        claims to describe.
+        """
+        if not pending_pairs:
+            return {ip: list(_as_labels(v)) for ip, v in previous_results.items()}
+        alerted = {}
+        for ip, labels in previous_results.items():
+            kept = [
+                label for label in _as_labels(labels)
+                if not (
+                    isinstance(label, str)
+                    and _is_dbl_label(label)
+                    and (ip, DNSCheck._dbl_server_from_label(label)) in pending_pairs
+                )
+            ]
+            if kept:
+                alerted[ip] = kept
+        return alerted
 
     def _apply_persistence_gate(self, listed_ips: dict, previous_pairs: set, pending_pairs: set):
         """Filter DBL sightings that have not yet appeared in two consecutive runs.
@@ -843,71 +1014,125 @@ class DNSCheck:
                     f"Verify against a second resolver before rotating IPs."
                 )
 
-    def _send_categorized_notifications(self, newly, still, delisted, pool_resolver=None, report_path=None):
-        """Send one Slack summary message, then upload the CSV as a file."""
+    @staticmethod
+    def _merge_label_maps(*maps) -> dict:
+        """Union several {ip: [server_label]} dicts without losing labels."""
+        merged = {}
+        for mapping in maps:
+            for ip, labels in (mapping or {}).items():
+                bucket = merged.setdefault(ip, [])
+                for label in _as_labels(labels):
+                    if label not in bucket:
+                        bucket.append(label)
+        return merged
+
+    def _send_categorized_notifications(self, newly, still, delisted, previous=None,
+                                        pool_resolver=None, report_path=None):
+        """Send one Slack summary message, then upload the CSV as a file.
+
+        Every number in the summary is derived from the same two snapshots —
+        the previous run's alerted set and this run's alerted set — and the
+        two populations (IPs on RBLs, domains on DBLs) are counted separately
+        end to end. That makes the report self-consistent:
+
+            total_listed_ips     = previous_listed_ips     + new - delisted
+            total_listed_domains = previous_listed_domains + new - delisted
+
+        Previously the totals were taken from the current run's labelled data
+        while new/delisted were derived from a previous run whose DBL markers
+        had been lost, so the two sides described different things.
+        """
         if not self.webhook_client:
             self.logger.log_warning("Webhook client not available, skipping notifications")
             return
 
-        def _classify_entries(entries: dict):
-            ip_items = set()
-            domain_items = set()
-            for ip, server_labels in entries.items():
-                labels = server_labels if isinstance(server_labels, (list, set, tuple)) else [server_labels]
-                has_rbl = False
-                for label in labels:
-                    if not isinstance(label, str):
-                        continue
-                    if " [" in label and label.endswith("]"):
-                        meta = label.rsplit(" [", 1)[1][:-1]  # ptr:example.com / apex:example.com
-                        if ":" in meta:
-                            _, domain = meta.split(":", 1)
-                            if domain:
-                                domain_items.add(domain)
-                    else:
-                        has_rbl = True
-                if has_rbl:
-                    ip_items.add(ip)
-            return sorted(ip_items), sorted(domain_items)
+        current_active = self._merge_label_maps(still, newly)
+        previous_active = previous if previous is not None else {}
 
-        current_active = {}
-        current_active.update(still)
-        current_active.update(newly)
+        cur_ips, cur_domains, cur_dbl_ips = classify_entities(current_active)
+        prev_ips, prev_domains, prev_dbl_ips = classify_entities(previous_active)
 
-        total_ips, total_domains = _classify_entries(current_active)
-        new_ips, new_domains = _classify_entries(newly)
-        delisted_ips, delisted_domains = _classify_entries(delisted)
-        affected_servers = {}
-        for ip in current_active:
+        # Deltas are set differences between the two snapshots of the *same*
+        # population, so the arithmetic closes by construction.
+        new_ips = sorted(cur_ips - prev_ips)
+        new_domains = sorted(cur_domains - prev_domains)
+        delisted_ips = sorted(prev_ips - cur_ips)
+        delisted_domains = sorted(prev_domains - cur_domains)
+
+        # IPs that stopped resolving to a listed domain. Reported separately
+        # so it can never be mistaken for an RBL delisting.
+        cleared_dbl_ips = sorted(prev_dbl_ips - cur_dbl_ips)
+
+        # Per-server breakdown, split by population so the counts add up to
+        # the headline figures instead of mixing RBL and DBL IPs together.
+        servers = {}
+        for ip in cur_ips:
             label = self._get_address_group(ip)
             if label:
-                affected_servers[label] = affected_servers.get(label, 0) + 1
+                servers.setdefault(label, {"listed_ips": 0, "dbl_affected_ips": 0, "domains": set()})
+                servers[label]["listed_ips"] += 1
+        for ip, labels in current_active.items():
+            label = self._get_address_group(ip)
+            if not label:
+                continue
+            entry = servers.setdefault(
+                label, {"listed_ips": 0, "dbl_affected_ips": 0, "domains": set()}
+            )
+            domains = {d for d in (_label_domain(x) for x in _as_labels(labels)) if d}
+            if domains:
+                entry["dbl_affected_ips"] += 1
+                entry["domains"].update(domains)
+
         ordered_affected_servers = [
-            {"server": label, "listed_ips": count}
-            for label, count in sorted(
-                affected_servers.items(),
-                key=lambda item: (-item[1], item[0]),
+            {
+                "server": label,
+                "listed_ips": entry["listed_ips"],
+                "listed_domains": len(entry["domains"]),
+                "dbl_affected_ips": entry["dbl_affected_ips"],
+            }
+            for label, entry in sorted(
+                servers.items(),
+                key=lambda item: (-item[1]["listed_ips"], -len(item[1]["domains"]), item[0]),
             )
         ]
 
         summary_data = {
             "summary": {
-                "total_listed_ips": len(total_ips),
-                "total_listed_domains": len(total_domains),
+                "total_listed_ips": len(cur_ips),
+                "total_listed_domains": len(cur_domains),
+                "previous_listed_ips": len(prev_ips),
+                "previous_listed_domains": len(prev_domains),
+                "dbl_affected_ips": len(cur_dbl_ips),
+                "previous_dbl_affected_ips": len(prev_dbl_ips),
                 "newly_listed_ips": new_ips,
                 "newly_listed_domains": new_domains,
                 "delisted_ips": delisted_ips,
                 "delisted_domains": delisted_domains,
+                "cleared_dbl_affected_ips": cleared_dbl_ips,
                 "affected_servers": ordered_affected_servers,
             }
         }
 
+        # Guard rail: if these ever disagree the message is lying, so say so
+        # in the log rather than letting a silent inconsistency reach Slack.
+        for name, total, prev_total, added, removed in (
+            ("IPs", len(cur_ips), len(prev_ips), len(new_ips), len(delisted_ips)),
+            ("domains", len(cur_domains), len(prev_domains), len(new_domains), len(delisted_domains)),
+        ):
+            if total != prev_total + added - removed:
+                self.logger.log_error(
+                    f"Summary arithmetic inconsistent for {name}: "
+                    f"{prev_total} previous + {added} new - {removed} delisted != {total} total"
+                )
+
         ok, errors = self.webhook_client.send_notification(summary_data, pool_resolver=pool_resolver)
         if ok:
             self.logger.log_info(
-                f"Slack summary sent (ips={len(total_ips)}, domains={len(total_domains)}, "
+                f"Slack summary sent (ips={len(cur_ips)} was {len(prev_ips)}, "
+                f"domains={len(cur_domains)} was {len(prev_domains)}, "
                 f"new_ips={len(new_ips)}, new_domains={len(new_domains)}, "
-                f"delisted_ips={len(delisted_ips)}, delisted_domains={len(delisted_domains)})"
+                f"delisted_ips={len(delisted_ips)}, delisted_domains={len(delisted_domains)}, "
+                f"dbl_affected_ips={len(cur_dbl_ips)})"
             )
         else:
             self.logger.log_warning(f"Slack summary notification failed: {errors}")

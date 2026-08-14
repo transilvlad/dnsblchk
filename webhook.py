@@ -71,38 +71,74 @@ class WebhookClient:
             summary = data.get("summary", {})
             total_listed_ips = int(summary.get("total_listed_ips", 0))
             total_listed_domains = int(summary.get("total_listed_domains", 0))
+            previous_listed_ips = int(summary.get("previous_listed_ips", 0))
+            previous_listed_domains = int(summary.get("previous_listed_domains", 0))
+            dbl_affected_ips = int(summary.get("dbl_affected_ips", 0))
             newly_listed_ips = summary.get("newly_listed_ips", [])
             newly_listed_domains = summary.get("newly_listed_domains", [])
             delisted_ips = summary.get("delisted_ips", [])
             delisted_domains = summary.get("delisted_domains", [])
+            cleared_dbl_ips = summary.get("cleared_dbl_affected_ips", [])
             affected_servers = summary.get("affected_servers", [])
 
             fallback_text = (
-                f"DNS summary: {total_listed_ips} IPs listed, {total_listed_domains} domains listed"
+                f"DNS summary: {total_listed_ips} IPs on RBLs, "
+                f"{total_listed_domains} domains on DBLs"
             )
+
+            def _delta(current: int, previous: int) -> str:
+                """Render movement since the last run, e.g. '(was 166, -13)'."""
+                change = current - previous
+                if change == 0:
+                    return "(unchanged)"
+                return f"(was {previous}, {change:+d})"
 
             def _list_line(label: str, items: list):
                 if not items:
-                    return f"- {label} 0"
+                    return f"- {label}: 0"
                 limit = 20
                 shown = items[:limit]
                 more = len(items) - len(shown)
                 joined = ", ".join(shown)
                 if more > 0:
                     joined = f"{joined}, +{more} more"
-                return f"- {label} {len(items)}: ({joined})"
+                return f"- {label}: {len(items)} ({joined})"
 
+            # Two independent populations. The IP figures come only from
+            # IP-based RBL listings, the domain figures only from DBL
+            # listings. They are rendered as separate blocks so a change in
+            # one can never be read as a change in the other.
             summary_text = (
-                f":rocket: *Summary: {total_listed_ips} IPs listed, {total_listed_domains} domains listed*\n"
-                f"{_list_line('New IP Listings', newly_listed_ips)}\n"
-                f"{_list_line('New Domain Listings', newly_listed_domains)}\n"
-                f"{_list_line('Delisted IPs', delisted_ips)}\n"
-                f"{_list_line('Delisted Domains', delisted_domains)}"
+                f":rocket: *{total_listed_ips} IPs listed on RBLs* "
+                f"{_delta(total_listed_ips, previous_listed_ips)}\n"
+                f"{_list_line('Newly listed IPs', newly_listed_ips)}\n"
+                f"{_list_line('IPs delisted (now clean on all RBLs)', delisted_ips)}\n"
+                f"\n"
+                f":globe_with_meridians: *{total_listed_domains} domains listed on DBLs* "
+                f"{_delta(total_listed_domains, previous_listed_domains)}"
             )
+            if total_listed_domains or dbl_affected_ips:
+                summary_text += f", affecting {dbl_affected_ips} IPs"
+            summary_text += (
+                f"\n{_list_line('Newly listed domains', newly_listed_domains)}\n"
+                f"{_list_line('Domains delisted', delisted_domains)}\n"
+                f"{_list_line('IPs no longer pointing at a listed domain', cleared_dbl_ips)}"
+            )
+
             if affected_servers:
-                summary_text += "\n- *Most affected servers:* " + ", ".join(
-                    f"{item['server']} ({item['listed_ips']})"
-                    for item in affected_servers
+                def _server_line(item):
+                    parts = []
+                    if item.get("listed_ips"):
+                        parts.append(f"{item['listed_ips']} IPs on RBLs")
+                    if item.get("listed_domains"):
+                        parts.append(
+                            f"{item['listed_domains']} domains on DBLs "
+                            f"({item.get('dbl_affected_ips', 0)} IPs)"
+                        )
+                    return f"{item['server']} — {', '.join(parts) if parts else '0'}"
+
+                summary_text += "\n\n*Affected servers:*\n" + "\n".join(
+                    f"• {_server_line(item)}" for item in affected_servers
                 )
 
             blocks.append({
